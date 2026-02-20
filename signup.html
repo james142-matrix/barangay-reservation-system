@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Barangay Molugan</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-box">
+            <h2>Create Account</h2>
+            <p class="subtitle">Join Barangay Molugan Reservation System</p>
+            
+            <div id="message"></div>
+            
+            <div class="form-group">
+                <label for="fullname">Full Name</label>
+                <input 
+                    id="fullname" 
+                    type="text"
+                    placeholder="Juan Dela Cruz" 
+                    autocomplete="name">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input 
+                    id="email" 
+                    type="email"
+                    placeholder="your@email.com" 
+                    autocomplete="email">
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input 
+                    id="phone" 
+                    type="tel"
+                    placeholder="09123456789" 
+                    autocomplete="tel">
+            </div>
+            
+            <div class="form-group">
+                <label for="address">Address</label>
+                <input 
+                    id="address" 
+                    type="text"
+                    placeholder="Your address in the barangay" 
+                    autocomplete="street-address">
+            </div>
+            
+            <div class="form-group">
+                <label for="signup-username">Username</label>
+                <input 
+                    id="signup-username" 
+                    type="text"
+                    placeholder="Choose a username" 
+                    autocomplete="username">
+            </div>
+            
+            <div class="form-group input-with-icon">
+                <label for="signup-password">Password</label>
+                <input 
+                    id="signup-password" 
+                    type="password"
+                    placeholder="At least 6 characters" 
+                    autocomplete="new-password">
+                <button type="button" class="eye-toggle" data-target="signup-password" aria-label="Toggle password visibility">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 9a3 3 0 100 6 3 3 0 000-6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="form-group input-with-icon">
+                <label for="confirm-password">Confirm Password</label>
+                <input 
+                    id="confirm-password" 
+                    type="password"
+                    placeholder="Confirm your password" 
+                    autocomplete="new-password">
+                <button type="button" class="eye-toggle" data-target="confirm-password" aria-label="Toggle password visibility">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 9a3 3 0 100 6 3 3 0 000-6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="signupPreview" style="margin-top:8px; font-size:13px; color:#666;"></div>
+            
+            <button class="btn btn-primary" onclick="signup()">Create Account</button>
+            
+            <div class="link-text">
+                Already have an account? <a href="index.html">Login Here</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/signup.js"></script>
+    <script src="js/responsive.js"></script>
+</body>
+</html>

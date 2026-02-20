@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Facilities - Barangay Molugan</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <a href="#" class="navbar-brand">🏛️ Barangay Molugan - Admin</a>
+        <ul class="nav-links">
+            <li><a href="admin-dashboard.html">Dashboard</a></li>
+            <li><a href="admin-requests.html">Approval Requests</a></li>
+            <li><a href="admin-users.html">Users</a></li>
+            <li><a href="admin-facilities.html" class="active">Manage Facilities</a></li>
+            <li><a href="reports.html">Reports</a></li>
+            <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
+        </ul>
+    </nav>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <ul class="sidebar-menu">
+            <li><a href="admin-dashboard.html">📊 Dashboard</a></li>
+            <li><a href="admin-requests.html">📋 Approval Requests</a></li>
+            <li><a href="admin-users.html">👥 Users</a></li>
+            <li><a href="admin-facilities.html" class="active">🏛️ Facilities</a></li>
+            <li><a href="reports.html">📈 Reports</a></li>
+            <li><a href="#" onclick="logout()">🚪 Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="dashboard-header">
+            <h1>Manage Facilities</h1>
+            <button class="btn btn-primary" onclick="openAddFacilityModal()">+ Add New Facility</button>
+        </div>
+
+        <!-- Facilities List -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>All Facilities</h2>
+            </div>
+            <div id="facilities-list">
+                <!-- Facilities will be loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Add/Edit Facility Modal -->
+    <div id="facilityModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add New Facility</h2>
+                <button class="close-modal" onclick="closeFacilityModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="facilityForm">
+                    <div class="form-group">
+                        <label for="facilityName">Facility Name</label>
+                        <input type="text" id="facilityName" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityIcon">Icon/Emoji</label>
+                        <input type="text" id="facilityIcon" placeholder="e.g., 🏛️" maxlength="3">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityCapacity">Capacity (persons)</label>
+                        <input type="number" id="facilityCapacity" required min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityPrice">Price per Event (₱)</label>
+                        <input type="number" id="facilityPrice" required min="0" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityDescription">Description</label>
+                        <textarea id="facilityDescription" rows="4"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityStatus">Status</label>
+                        <select id="facilityStatus">
+                            <option value="available">Available</option>
+                            <option value="maintenance">Maintenance</option>
+                            <option value="unavailable">Unavailable</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeFacilityModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveFacility()">Save Facility</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/admin-facilities.js"></script>
+    <script src="js/responsive.js"></script>
+</body>
+</html>

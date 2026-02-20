@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resident Dashboard - Barangay Molugan</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <a href="#" class="navbar-brand">🏛️ Barangay Molugan</a>
+        <ul class="nav-links">
+            <li><a href="resident-dashboard.html" class="active">Dashboard</a></li>
+            <li><a href="facilities.html">Browse Facilities</a></li>
+            <li><a href="reserve.html">Make Reservation</a></li>
+            <li><a href="my-reservations.html">My Reservations</a></li>
+            <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
+        </ul>
+    </nav>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <ul class="sidebar-menu">
+            <li><a href="resident-dashboard.html" class="active">📊 Dashboard</a></li>
+            <li><a href="facilities.html">🏛️ Facilities</a></li>
+            <li><a href="reserve.html">📝 New Reservation</a></li>
+            <li><a href="my-reservations.html">📋 My Reservations</a></li>
+            <li><a href="#" onclick="logout()">🚪 Logout</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <div class="welcome-row">
+            <div class="welcome-card">
+                <div class="welcome-left">
+                    <h2>Welcome, <span id="username-display"></span> 👋</h2>
+                    <div class="welcome-sub">Make the most of barangay services and manage your reservations.</div>
+                </div>
+                <div style="position:relative; display:flex; gap:12px; align-items:center;">
+                    <button onclick="toggleNotifications()" class="btn btn-secondary" style="display:flex; align-items:center; gap:8px;">🔔 <span>Notifications</span> <span id="notificationBadge" style="background:red; color:white; padding:2px 6px; border-radius:50%; margin-left:5px; font-size:12px;"></span></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-container">
+
+            <div class="card modern-card">
+                <h3>Make Reservation</h3>
+                <p>Book barangay facilities easily.</p>
+                <a href="reserve.html">
+                    <button class="btn-primary">Reserve Now</button>
+                </a>
+            </div>
+
+            <div class="card modern-card">
+                <h3>My Reservations</h3>
+                <p>Track your request status.</p>
+                <a href="my-reservations.html">
+                    <button class="btn-success">View Requests</button>
+                </a>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="js/database.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/resident-dashboard.js"></script>
+<script src="js/responsive.js"></script>
+</body>
+</html>
