@@ -15,9 +15,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
 let selectedReservation = null;
 
-function loadMyReservations() {
+async function loadMyReservations() {
     const user = getLoggedInUser();
-    const reservations = getReservationsByUser(user.username);
+    let reservations = [];
+
+    // Try MySQL via API first, fall back to localStorage
+    try {
+        reservations = await window.api.getReservationsByUser(user.username);
+        console.log('[my-reservations] loaded from MySQL:', reservations.length);
+    } catch (e) {
+        console.warn('[my-reservations] API unavailable, using localStorage:', e.message);
+        reservations = getReservationsByUser(user.username);
+    }
+
     displayReservations(reservations);
 }
 
@@ -171,22 +181,33 @@ function closeDetailModal() {
     selectedReservation = null;
 }
 
-function cancelReservationAction(id) {
+async function cancelReservationAction(id) {
     if (confirm('Are you sure you want to cancel this reservation?')) {
-        deleteReservation(id);
+        try {
+            await window.api.deleteReservation(id);
+        } catch (e) {
+            console.warn('[my-reservations] API delete failed, using localStorage:', e.message);
+            deleteReservation(id);
+        }
         showToast('Reservation cancelled successfully', 'success');
         loadMyReservations();
     }
 }
 
-function cancelReservation() {
+async function cancelReservation() {
     if (selectedReservation && confirm('Are you sure you want to cancel this reservation?')) {
-        deleteReservation(selectedReservation.id);
+        try {
+            await window.api.deleteReservation(selectedReservation.id);
+        } catch (e) {
+            console.warn('[my-reservations] API delete failed, using localStorage:', e.message);
+            deleteReservation(selectedReservation.id);
+        }
         showToast('Reservation cancelled successfully', 'success');
         closeDetailModal();
         loadMyReservations();
     }
 }
+
 
 // Close modal when clicking outside
 document.addEventListener('click', function(event) {

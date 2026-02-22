@@ -12,6 +12,7 @@ function loadDashboard() {
     document.getElementById('stat-pending').textContent = stats.pending;
     document.getElementById('stat-approved').textContent = stats.approved;
     document.getElementById('stat-rejected').textContent = stats.rejected;
+    document.getElementById('stat-completed').textContent = stats.completed;
     
     // Display pending requests
     displayPendingRequests();

@@ -1,0 +1,4 @@
+[firebase] Admin SDK initialised
+[reservations] added event_end_date column
+[reservations] table ready
+API listening on port 3000

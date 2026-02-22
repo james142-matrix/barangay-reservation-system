@@ -1,7 +1,11 @@
 // Initialize reservation page
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     checkAuth('resident');
-    loadFacilitiesDropdown();
+    try {
+        await loadFacilitiesDropdown();
+    } catch (e) {
+        console.error('Error loading facilities', e);
+    }
     setupEventListeners();
     loadNotifications();
     
@@ -14,26 +18,106 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 3000);
 });
 
-function loadFacilitiesDropdown() {
-    const facilities = getAllFacilities();
+async function loadFacilitiesDropdown() {
     const select = document.getElementById('facility');
-    
+
+    // always start with the placeholder option
+    select.innerHTML = '<option value="">-- Choose a Facility --</option>';
+
+    // Load both API and local facilities, then merge by id.
+    // Admin adds facilities locally, while API may still return a static list.
+    let apiFacilities = [];
+    let localFacilities = [];
+
+    try {
+        apiFacilities = await window.api.getFacilities();
+    } catch (e) {
+        console.warn('Failed to load facilities from API', e);
+    }
+
+    try {
+        localFacilities = getAllFacilities();
+    } catch (e) {
+        console.warn('Failed to load facilities from local database', e);
+    }
+
+    const facilitiesMap = new Map();
+    [...apiFacilities, ...localFacilities].forEach(f => {
+        if (!f || typeof f.id === 'undefined' || f.id === null) return;
+        facilitiesMap.set(String(f.id), f);
+    });
+    let facilities = Array.from(facilitiesMap.values());
+
+    console.log('facilities received for dropdown', facilities);
+    if (!Array.isArray(facilities) || facilities.length === 0) {
+        // if we got something other than an array or an empty list, attempt to
+        // repair the local database and try again once before giving up.
+        if (!Array.isArray(facilities)) {
+            facilities = [];
+        }
+
+        // repopulate defaults so user isn’t stuck with a blank dropdown
+        if (facilities.length === 0) {
+            console.warn('No facilities found; seeding defaults');
+            // run initializer in case database was cleared entirely
+            if (typeof initializeDatabase === 'function') {
+                initializeDatabase();
+            }
+            facilities = getAllFacilities();
+        }
+    }
+
+    if (facilities.length === 0) {
+        select.innerHTML += '<option disabled value="">(no facilities available)</option>';
+        // show a warning so the resident understands the problem
+        if (typeof showToast === 'function') {
+            showToast('No facilities are currently available. Please try again later or contact an administrator.', 'warning');
+        }
+        return;
+    }
+
     facilities.forEach(f => {
         const option = document.createElement('option');
         option.value = f.id;
         option.textContent = `${f.name} (₱${f.price})`;
         select.appendChild(option);
     });
+
+    // if user was coming from the facilities page, a facility id might be stored
+    const stored = localStorage.getItem('selectedFacilityId');
+    if (stored) {
+        const exists = facilities.find(f => f.id === parseInt(stored) || f.id === stored);
+        if (exists) {
+            select.value = exists.id;
+            updateFacilityPrice();
+        }
+        // clear stored value so it doesn't persist across unrelated visits
+        localStorage.removeItem('selectedFacilityId');
+    }
 }
 
 function setupEventListeners() {
     const facilitySelect = document.getElementById('facility');
     const startTimeInput = document.getElementById('startTime');
     const endTimeInput = document.getElementById('endTime');
+    const startDateInput = document.getElementById('eventDate');
+    const endDateInput = document.getElementById('eventEndDate');
     
     facilitySelect.addEventListener('change', updateFacilityPrice);
     startTimeInput.addEventListener('change', calculateCost);
     endTimeInput.addEventListener('change', calculateCost);
+    
+    if (startDateInput && endDateInput) {
+        // ensure end date not before start date
+        startDateInput.addEventListener('change', function() {
+            if (endDateInput.value && endDateInput.value < this.value) {
+                endDateInput.value = this.value;
+            }
+            endDateInput.min = this.value;
+            calculateCost();
+        });
+        endDateInput.addEventListener('change', calculateCost);
+    }
 }
 
 function updateFacilityPrice() {
@@ -44,7 +128,7 @@ function updateFacilityPrice() {
         return;
     }
     
-    const facility = getFacilityById(parseInt(facilityId));
+    const facility = getFacilityById(facilityId);
     if (facility) {
         document.getElementById('facilityPrice').textContent = `₱${facility.price}`;
         calculateCost();
@@ -53,41 +137,45 @@ function updateFacilityPrice() {
 
 function calculateCost() {
     const facilityId = document.getElementById('facility').value;
+    const startDate = document.getElementById('eventDate').value;
+    const endDate = document.getElementById('eventEndDate').value;
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
     
-    if (!facilityId || !startTime || !endTime) {
+    if (!facilityId || !startDate || !endDate || !startTime || !endTime) {
         document.getElementById('totalCost').textContent = '₱0';
         document.getElementById('duration').textContent = '-';
         return;
     }
     
-    const facility = getFacilityById(parseInt(facilityId));
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
+    const facility = getFacilityById(facilityId);
+    const startDt = new Date(`${startDate}T${startTime}`);
+    const endDt = new Date(`${endDate}T${endTime}`);
+    let durationText = '';
+    let durationHours = 0;
     
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = endHour * 60 + endMin;
-    
-    let durationHours;
-    if (endMinutes <= startMinutes) {
-        durationHours = 0;
-        document.getElementById('duration').textContent = 'Invalid time range';
+    if (endDt <= startDt) {
+        durationText = 'Invalid range';
     } else {
-        durationHours = (endMinutes - startMinutes) / 60;
-        document.getElementById('duration').textContent = `${durationHours.toFixed(1)} hours`;
+        const diffMs = endDt - startDt;
+        durationHours = diffMs / (1000 * 60 * 60);
+        const days = Math.floor(durationHours / 24);
+        const hours = durationHours - days * 24;
+        durationText = days > 0 ? `${days}d ${hours.toFixed(1)}h` : `${hours.toFixed(1)}h`;
     }
+    document.getElementById('duration').textContent = durationText;
     
     const totalCost = facility ? facility.price * durationHours : 0;
     document.getElementById('totalCost').textContent = `₱${totalCost.toFixed(2)}`;
 }
 
-function submitReservation(event) {
+async function submitReservation(event) {
     event.preventDefault();
     
     const user = getLoggedInUser();
-    const facilityId = parseInt(document.getElementById('facility').value);
-    const eventDate = document.getElementById('eventDate').value;
+    const facilityId = document.getElementById('facility').value;
+    const eventDate = document.getElementById('eventDate').value; // start date
+    const eventEndDate = document.getElementById('eventEndDate').value; // end date
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
     const eventType = document.getElementById('eventType').value;
@@ -97,8 +185,13 @@ function submitReservation(event) {
     const contactPhone = document.getElementById('contactPhone').value;
     
     // Validation
-    if (!facilityId || !eventDate || !startTime || !endTime || !eventType || !expectedGuests) {
+    if (!facilityId || !eventDate || !eventEndDate || !startTime || !endTime || !eventType || !expectedGuests) {
         showToast('Please fill in all required fields', 'warning');
+        return;
+    }
+    
+    if (new Date(eventEndDate) < new Date(eventDate)) {
+        showToast('End date cannot be before start date', 'warning');
         return;
     }
     
@@ -114,23 +207,30 @@ function submitReservation(event) {
     }
     
     // Check for conflicts with existing reservations
-    const existingReservations = getReservationsByUser(user.username);
+    // compute datetime ranges for new reservation
+    const startDt = new Date(`${eventDate}T${startTime}`);
+    const endDt = new Date(`${eventEndDate}T${endTime}`);
+
+    // fetch reservations for this user (API or local)
+    let existingReservations = [];
+    try {
+        existingReservations = await window.api.getReservationsByUser(user.username);
+    } catch (e) {
+        console.warn('Could not load reservations from API, using local cache', e);
+        existingReservations = getReservationsByUser(user.username);
+    }
     const hasConflict = existingReservations.some(r => {
         if (r.status === 'rejected') return false;
-        if (r.facilityId !== facilityId) return false;
-        if (r.eventDate !== eventDate) return false;
-        
-        const rStart = r.startTime.split(':').map(Number);
-        const rEnd = r.endTime.split(':').map(Number);
-        const newStart = startTime.split(':').map(Number);
-        const newEnd = endTime.split(':').map(Number);
-        
-        const rStartMin = rStart[0] * 60 + rStart[1];
-        const rEndMin = rEnd[0] * 60 + rEnd[1];
-        const newStartMin = newStart[0] * 60 + newStart[1];
-        const newEndMin = newEnd[0] * 60 + newEnd[1];
-        
-        return !(newEndMin <= rStartMin || newStartMin >= rEndMin);
+        // compare loosely because facilityId may be string or number
+        if (r.facilityId != facilityId) return false;
+
+        // determine existing reservation range
+        const rStart = new Date(`${r.eventDate || r.eventStartDate}T${r.startTime}`);
+        const rEndDate = r.eventEndDate || r.eventDate;
+        const rEnd = new Date(`${rEndDate}T${r.endTime}`);
+
+        // overlap if intervals intersect
+        return !(endDt <= rStart || startDt >= rEnd);
     });
     
     if (hasConflict) {
@@ -138,21 +238,35 @@ function submitReservation(event) {
         return;
     }
     
-    // Create reservation
+    // compute total cost before submitting
+    const [sHour, sMin] = startTime.split(':').map(Number);
+    const [eHour, eMin] = endTime.split(':').map(Number);
+    const startMinTotal = sHour * 60 + sMin;
+    const endMinTotal = eHour * 60 + eMin;
+    let durationHoursCalc = 0;
+    if (endMinTotal > startMinTotal) {
+        durationHoursCalc = (endMinTotal - startMinTotal) / 60;
+    }
+    const totalCost = facility.price * durationHoursCalc;
+
+    // Create reservation via backend API if possible
     try {
-        const reservation = createReservation({
+        const reservation = await window.api.createReservation({
             username: user.username,
             facilityId: facilityId,
-            eventDate: eventDate,
+            eventDate: eventDate,           // legacy
+            eventStartDate: eventDate,
+            eventEndDate: eventEndDate,
             startTime: startTime,
             endTime: endTime,
             eventType: eventType,
             expectedGuests: expectedGuests,
             eventDescription: eventDescription,
             contactPerson: contactPerson,
-            contactPhone: contactPhone
+            contactPhone: contactPhone,
+            totalCost: totalCost
         });
-        
+
         showToast('Reservation submitted successfully! Awaiting admin approval.', 'success');
         
         setTimeout(() => {

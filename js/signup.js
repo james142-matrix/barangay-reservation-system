@@ -1,4 +1,4 @@
-function signup() {
+async function signup() {
     const fullname = document.getElementById("fullname").value.trim();
     const email = document.getElementById("email").value.trim();
     const phone = document.getElementById("phone").value.trim();
@@ -8,7 +8,7 @@ function signup() {
     const confirmPassword = document.getElementById("confirm-password").value;
 
     // Validation
-    if (!fullname || !email || !phone || !address || !username || !password || !confirmPassword) {
+    if (!fullname || !phone || !address || !username || !password || !confirmPassword) {
         showMessage("All fields are required", "error");
         return;
     }
@@ -48,15 +48,37 @@ function signup() {
     }
 
     try {
-        // Create user
-        const newUser = createUser({
+        // Hash the password first so we can send the hash to both MySQL and localStorage
+        const hashedPassword = await hashPassword(password);
+
+        const userData = {
             fullname: fullname,
             email: email,
             phone: phone,
             address: address,
             username: username,
-            password: password
-        });
+            password: hashedPassword,   // already hashed — createUser won't double-hash
+            role: 'resident'
+        };
+
+        // 1. Try to save to MySQL via the server API
+        let savedToMySQL = false;
+        if (window.api && typeof window.api.signup === 'function') {
+            try {
+                await window.api.signup(userData);
+                savedToMySQL = true;
+                console.log('[signup] user saved to MySQL');
+            } catch (apiErr) {
+                console.warn('[signup] API unavailable, falling back to localStorage:', apiErr.message);
+            }
+        }
+
+        // 2. Always save to localStorage as well (keeps offline mode working)
+        await createUser(userData);
+
+        if (savedToMySQL) {
+            console.log('[signup] user also mirrored to localStorage');
+        }
 
         if (typeof showToast === 'function') {
             showToast(`Account created for ${username}`, 'success');

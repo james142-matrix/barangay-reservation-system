@@ -110,6 +110,22 @@ function initializeDatabase() {
             existingData.notifications = [];
         }
         
+        // Ensure payment fields exist on existing reservations
+        if (existingData.reservations) {
+            existingData.reservations.forEach(r => {
+                if (typeof r.paymentStatus === 'undefined') {
+                    r.paymentStatus = 'pending';
+                }
+                if (typeof r.paymentMethod === 'undefined') {
+                    r.paymentMethod = null;
+                }
+                if (typeof r.totalCost === 'undefined') {
+                    r.totalCost = 0;
+                }
+                // completed status was introduced later; default remains as-is
+            });
+        }
+        
         // Ensure staff users exist in the database
         const staffUsers = [
             {
@@ -160,47 +176,204 @@ function saveDatabase(data) {
 // USER FUNCTIONS
 // ===========================
 
+function isSecurePasswordRecord(passwordValue) {
+    return typeof passwordValue === "string" && passwordValue.startsWith("pbkdf2$");
+}
+
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+function base64ToUint8Array(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+function secureCompareBytes(a, b) {
+    if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array)) return false;
+    if (a.length !== b.length) return false;
+
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) {
+        diff |= a[i] ^ b[i];
+    }
+    return diff === 0;
+}
+
+async function hashPassword(password) {
+    if (!password || typeof password !== "string") {
+        throw new Error("Password is required");
+    }
+
+    if (!window.crypto || !window.crypto.subtle || !window.TextEncoder) {
+        throw new Error("Secure password hashing is not supported in this browser");
+    }
+
+    const salt = window.crypto.getRandomValues(new Uint8Array(16));
+    const iterations = 120000;
+    const encoder = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+        "raw",
+        encoder.encode(password),
+        { name: "PBKDF2" },
+        false,
+        ["deriveBits"]
+    );
+
+    const hashBuffer = await window.crypto.subtle.deriveBits(
+        {
+            name: "PBKDF2",
+            salt: salt,
+            iterations: iterations,
+            hash: "SHA-256"
+        },
+        keyMaterial,
+        256
+    );
+
+    const saltBase64 = arrayBufferToBase64(salt);
+    const hashBase64 = arrayBufferToBase64(hashBuffer);
+    return `pbkdf2$${iterations}$${saltBase64}$${hashBase64}`;
+}
+
+async function verifyPassword(password, storedPassword) {
+    if (!storedPassword || typeof storedPassword !== "string") return false;
+
+    if (!isSecurePasswordRecord(storedPassword)) {
+        return password === storedPassword;
+    }
+
+    if (!window.crypto || !window.crypto.subtle || !window.TextEncoder) {
+        return false;
+    }
+
+    const parts = storedPassword.split("$");
+    if (parts.length !== 4) return false;
+
+    const iterations = parseInt(parts[1], 10);
+    const saltBase64 = parts[2];
+    const expectedHashBase64 = parts[3];
+
+    if (!Number.isFinite(iterations) || iterations < 1) return false;
+
+    const encoder = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+        "raw",
+        encoder.encode(password),
+        { name: "PBKDF2" },
+        false,
+        ["deriveBits"]
+    );
+
+    const actualHashBuffer = await window.crypto.subtle.deriveBits(
+        {
+            name: "PBKDF2",
+            salt: base64ToUint8Array(saltBase64),
+            iterations: iterations,
+            hash: "SHA-256"
+        },
+        keyMaterial,
+        256
+    );
+
+    const expectedHashBytes = base64ToUint8Array(expectedHashBase64);
+    const actualHashBytes = new Uint8Array(actualHashBuffer);
+    return secureCompareBytes(expectedHashBytes, actualHashBytes);
+}
+
+async function authenticateUser(username, password) {
+    const db = getDatabase();
+    const user = db.users.find(u => u.username === username);
+    if (!user) return null;
+
+    const isValid = await verifyPassword(password, user.password);
+    if (!isValid) return null;
+
+    // Migrate legacy plaintext passwords after first successful login.
+    if (!isSecurePasswordRecord(user.password)) {
+        user.password = await hashPassword(password);
+        saveDatabase(db);
+    }
+
+    return user;
+}
+
 function getAllUsers() {
     const db = getDatabase();
-    return db.users;
+    // return only non-archived users
+    return db.users.filter(u => !u.archived);
 }
 
 function getUserByUsername(username) {
     const db = getDatabase();
-    return db.users.find(u => u.username === username);
+    return db.users.find(u => u.username === username && !u.archived);
 }
 
 function getUserById(id) {
     const db = getDatabase();
-    return db.users.find(u => u.id === id);
+    return db.users.find(u => u.id === id && !u.archived);
 }
 
-function createUser(userData) {
+async function createUser(userData) {
     const db = getDatabase();
+    const safePassword = userData.password ? String(userData.password) : "";
+    const hashedPassword = safePassword && !isSecurePasswordRecord(safePassword)
+        ? await hashPassword(safePassword)
+        : safePassword;
+
     const newUser = {
         id: Date.now(),
         ...userData,
-        role: "resident"
+        password: hashedPassword,
+        role: userData.role || "resident",
+        archived: false
     };
     db.users.push(newUser);
     saveDatabase(db);
     return newUser;
 }
 
-function updateUser(id, updates) {
+async function updateUser(id, updates) {
     const db = getDatabase();
     const user = db.users.find(u => u.id === id);
     if (user) {
-        Object.assign(user, updates);
+        const nextUpdates = { ...updates };
+        if (Object.prototype.hasOwnProperty.call(nextUpdates, "password")) {
+            if (!nextUpdates.password) {
+                delete nextUpdates.password;
+            } else if (!isSecurePasswordRecord(nextUpdates.password)) {
+                nextUpdates.password = await hashPassword(String(nextUpdates.password));
+            }
+        }
+        Object.assign(user, nextUpdates);
         saveDatabase(db);
     }
     return user;
 }
 
-function deleteUser(id) {
+// mark a user as archived instead of removing from database
+function archiveUser(id) {
     const db = getDatabase();
-    db.users = db.users.filter(u => u.id !== id);
-    saveDatabase(db);
+    const user = db.users.find(u => u.id === id);
+    if (user) {
+        user.archived = true;
+        saveDatabase(db);
+    }
+    return user;
+}
+
+// kept for compatibility (but now archive)
+function deleteUser(id) {
+    return archiveUser(id);
 }
 
 // ===========================
@@ -209,12 +382,98 @@ function deleteUser(id) {
 
 function getAllFacilities() {
     const db = getDatabase();
+    if (!Array.isArray(db.facilities) || db.facilities.length === 0) {
+        // ensure we always have the default set; this handles cases where
+        // localStorage was manually cleared or corrupted by earlier buggy code
+        db.facilities = [
+            {
+                id: 1,
+                name: "Community Hall",
+                description: "Large multi-purpose venue for events and gatherings",
+                capacity: 200,
+                price: 2000,
+                icon: "🏛️",
+                status: "available"
+            },
+            {
+                id: 2,
+                name: "Sports Complex",
+                description: "Basketball court, badminton courts, and training facilities",
+                capacity: 150,
+                price: 1500,
+                icon: "🏀",
+                status: "available"
+            },
+            {
+                id: 3,
+                name: "Cultural Center",
+                description: "Dedicated space for cultural events and workshops",
+                capacity: 100,
+                price: 1000,
+                icon: "🎭",
+                status: "available"
+            },
+            {
+                id: 4,
+                name: "Library & Learning Center",
+                description: "Quiet study area with meeting rooms",
+                capacity: 50,
+                price: 500,
+                icon: "📚",
+                status: "available"
+            },
+            {
+                id: 5,
+                name: "Medical Room",
+                description: "First aid and emergency medical services room",
+                capacity: 20,
+                price: 800,
+                icon: "🏥",
+                status: "available"
+            },
+            {
+                id: 6,
+                name: "Garden Event Space",
+                description: "Outdoor venue with covered pavilion",
+                capacity: 300,
+                price: 2500,
+                icon: "🌳",
+                status: "available"
+            }
+        ];
+        saveDatabase(db);
+    }
     return db.facilities;
 }
 
 function getFacilityById(id) {
     const db = getDatabase();
-    return db.facilities.find(f => f.id === parseInt(id));
+    return db.facilities.find(f => String(f.id) === String(id));
+}
+
+// add a new facility record
+function addFacility(facilityData) {
+    const db = getDatabase();
+    db.facilities.push(facilityData);
+    saveDatabase(db);
+    return facilityData;
+}
+
+// update an existing facility; returns the updated object or null if not found
+function updateFacility(id, updates) {
+    const db = getDatabase();
+    const f = db.facilities.find(f => String(f.id) === String(id));
+    if (!f) return null;
+    Object.assign(f, updates);
+    saveDatabase(db);
+    return f;
+}
+
+// remove a facility by id
+function deleteFacility(id) {
+    const db = getDatabase();
+    db.facilities = db.facilities.filter(f => String(f.id) !== String(id));
+    saveDatabase(db);
 }
 
 // ===========================
@@ -226,6 +485,11 @@ function createReservation(reservationData) {
     const newReservation = {
         id: Date.now(),
         ...reservationData,
+        // billing related defaults
+        totalCost: reservationData.totalCost || 0,
+        paymentStatus: "pending", // pending / paid / cash
+        paymentMethod: null,
+
         status: "pending",
         createdAt: new Date().toISOString(),
         approvedAt: null,
@@ -282,6 +546,48 @@ function rejectReservation(id, reason, adminUsername) {
         rejectedAt: new Date().toISOString(),
         rejectedBy: adminUsername
     });
+}
+
+// Mark reservation as paid (online) or cash
+function payReservation(id, method) {
+    const updates = {
+        paymentStatus: "paid",
+        paymentMethod: method,
+        paymentDate: new Date().toISOString(),
+        status: "completed" // mark complete once paid
+    };
+    return updateReservation(id, updates);
+}
+
+function markReservationCash(id) {
+    const updates = {
+        paymentStatus: "cash",
+        paymentMethod: "cash",
+        paymentDate: new Date().toISOString(),
+        status: "completed"
+    };
+    return updateReservation(id, updates);
+}
+
+
+// ===========================
+// BILLING HELPER FUNCTIONS
+// ===========================
+
+// Returns approved reservations that have not yet been paid for a specific user
+function getUnpaidReservationsByUser(username) {
+    const db = getDatabase();
+    return db.reservations.filter(r =>
+        r.username === username &&
+        r.status === 'approved' &&
+        r.paymentStatus !== 'paid' &&
+        r.paymentStatus !== 'cash'
+    );
+}
+
+// Convenience wrapper used by billing.js -- marks a reservation as paid online
+function markReservationPaid(id) {
+    return payReservation(id, 'online');
 }
 
 // ===========================

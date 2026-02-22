@@ -105,19 +105,27 @@
 - [x] Conflict detection (prevents double-booking)
 - [x] Capacity validation
 
-### 5. My Reservations ✅
+### 5. My Reservations & Billing ✅
 - [x] List of all personal reservations
 - [x] Status filter dropdown (All, Pending, Approved, Rejected)
+- [x] Payment filter dropdown (Any, Unpaid, Paid, Cash)
 - [x] Status badges (color-coded)
 - [x] Facility name display
 - [x] Event date and time
-- [x] Reservation detail modal
+- [x] Total cost column
+- [x] Payment status column (Paid/Unpaid/Cash)
+- [x] "Pay" button for approved/unpaid items (links to billing page)
+- [x] Reservation detail modal now shows cost & payment info
+- [x] "Pay Now" action in detail modal for approved/unpaid reservations
 - [x] Cancel button for pending reservations
 - [x] Rejection reason display if rejected
 - [x] Approval date display if approved
 
 ### 6. Admin Dashboard ✅
 - [x] Total reservations count
+- [x] Completed reservations count (reflects paid bookings)
+- [x] Approval notification instructs resident to pay via billing
+
 - [x] Pending approvals count
 - [x] Approved count
 - [x] Rejected count
@@ -150,6 +158,18 @@
 - [x] Facility usage table
 - [x] Top residents list
 - [x] Status breakdown percentages
+
+### 9. Admin User Management ✅
+- [x] Add new users (resident, staff, admin)
+- [x] Edit existing users without exposing current passwords
+- [x] Password field left blank during edit preserves previous password
+- [x] Archive users instead of deleting; archived users are hidden from UI
+- [x] Stats update correctly excluding archived accounts
+
+### 10. Navigation Simplification ✅
+- [x] Removed extraneous top‑bar links across all dashboard pages
+- [x] Sidebar now only contains Dashboard and Logout links
+- [x] Navigation changes mentioned in README and user guidance
 - [x] Monthly trend table
 - [x] Detailed reservations table (20 shown, more available)
 - [x] Professional layout

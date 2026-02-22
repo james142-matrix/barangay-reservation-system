@@ -2,9 +2,13 @@
 (function(){
     // Placeholder - replace with your Firebase project's config
     window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_AUTH_DOMAIN",
-        projectId: "YOUR_PROJECT_ID"
+  apiKey: "AIzaSyBGUl7ho1zTlylQ9mvR9lkh-YKDPMzKiBA",
+  authDomain: "barangay-reservation.firebaseapp.com",
+  projectId: "barangay-reservation",
+  storageBucket: "barangay-reservation.firebasestorage.app",
+  messagingSenderId: "537024104735",
+  appId: "1:537024104735:web:a1675c115fec296dc4082a",
+  measurementId: "G-W1P3BGE7Z1"
     };
 
     window.initFirebase = function(config) {

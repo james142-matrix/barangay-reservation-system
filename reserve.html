@@ -15,6 +15,7 @@
             <li><a href="facilities.html">Browse Facilities</a></li>
             <li><a href="reserve.html" class="active">Make Reservation</a></li>
             <li><a href="my-reservations.html">My Reservations</a></li>
+            <li><a href="billing.html">Billing</a></li>
             <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
         </ul>
     </nav>
@@ -26,6 +27,7 @@
             <li><a href="facilities.html">🏛️ Facilities</a></li>
             <li><a href="reserve.html" class="active">📝 New Reservation</a></li>
             <li><a href="my-reservations.html">📋 My Reservations</a></li>
+            <li><a href="billing.html">💳 Billing</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -54,9 +56,15 @@
                             </select>
                         </div>
 
-                        <div class="form-group">
-                            <label for="eventDate">Event Date *</label>
-                            <input type="date" id="eventDate" required>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="eventDate">Start Date *</label>
+                                <input type="date" id="eventDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="eventEndDate">End Date *</label>
+                                <input type="date" id="eventEndDate" required>
+                            </div>
                         </div>
 
                         <div class="form-row">
@@ -138,8 +146,8 @@
 
     <script src="js/database.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/api.js"></script>
     <script src="js/reserve.js"></script>
     <script src="js/responsive.js"></script>
 </body>
-</html></body>
 </html>

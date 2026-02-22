@@ -88,7 +88,8 @@ function showFacilityModal(event, facilityId) {
         facilityReservations.forEach(r => {
             const resident = getUserByUsername(r.username);
             const residentName = resident ? resident.fullname : r.username;
-            const eventDate = formatDate(r.eventDate).split(',')[0];
+            const eventDate = formatDate(r.eventStartDate || r.eventDate).split(',')[0] +
+                (r.eventEndDate && r.eventEndDate !== (r.eventStartDate || r.eventDate) ? ' → ' + formatDate(r.eventEndDate).split(',')[0] : '');
             const statusClass = r.status === 'pending' ? 'pending' : (r.status === 'approved' ? 'approved' : 'rejected');
             const statusBadge = `<span class="badge ${statusClass}">${r.status.toUpperCase()}</span>`;
             
@@ -134,8 +135,12 @@ function loadTodayReservations() {
     
     // Filter reservations for today
     const todayReservations = allReservations.filter(r => {
-        const resDate = new Date(r.eventDate).toISOString().split('T')[0];
-        return resDate === today;
+        const start = new Date((r.eventStartDate || r.eventDate) + 'T' + r.startTime);
+        const endDate = r.eventEndDate || r.eventDate;
+        const end = new Date(endDate + 'T' + r.endTime);
+        const t = new Date(today + 'T00:00');
+        // include if today is between start and end (inclusive start)
+        return t >= start && t <= end;
     });
     
     const container = document.getElementById('today-reservations');

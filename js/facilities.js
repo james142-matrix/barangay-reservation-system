@@ -41,7 +41,7 @@ function loadFacilities() {
 function createFacilityCard(facility) {
     const card = document.createElement('div');
     card.className = 'facility-card';
-    card.onclick = () => showFacilityModal(facility);
+    card.addEventListener('click', () => showFacilityModal(facility));
     
     card.innerHTML = `
         <div class="facility-image">
@@ -54,15 +54,26 @@ function createFacilityCard(facility) {
                 <small>👥 Capacity: ${facility.capacity}</small>
                 <span class="facility-price">₱${facility.price}</span>
             </div>
-            <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="showFacilityModal(event)">View Details</button>
+            <button class="btn btn-primary" style="width: 100%; margin-top: 10px;">View Details</button>
         </div>
     `;
-    
+
+    // attach listener to the button separately so we can stop propagation correctly
+    const btn = card.querySelector('button');
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showFacilityModal(facility);
+    });
+
     return card;
 }
 
-function showFacilityModal(facility) {
-    if (event) event.stopPropagation();
+function showFacilityModal(facility, e) {
+    // e is the click event when coming from a button; stop propagation so the card's
+    // onclick handler doesn't also fire.
+    if (e && e.stopPropagation) {
+        e.stopPropagation();
+    }
     
     selectedFacility = facility;
     const modal = document.getElementById('facilityModal');

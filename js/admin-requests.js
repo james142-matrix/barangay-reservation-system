@@ -95,8 +95,9 @@ function openApprovalModal(requestId) {
             <div>
                 <strong style="color: #667eea;">Facility & Booking</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Facility:</strong> ${facilityName}</p>
-                <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventDate).split(' ')[0]}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventStartDate || request.eventDate).split(' ')[0]}${request.eventEndDate && request.eventEndDate !== (request.eventStartDate || request.eventDate) ? ' → ' + formatDate(request.eventEndDate).split(' ')[0] : ''}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Time:</strong> ${request.startTime} - ${request.endTime}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Cost:</strong> ₱${request.totalCost ? request.totalCost.toFixed(2) : '0.00'}</p>
             </div>
         </div>
 
@@ -177,7 +178,7 @@ function approveResv() {
         createNotification(
             reservation.username,
             '✅ Reservation Approved!',
-            `Your reservation for ${facilityName} on ${formatDateOnly(reservation.eventDate)} has been APPROVED!`,
+            `Your reservation for ${facilityName} on ${formatDateOnly(reservation.eventDate)} has been APPROVED! Please visit the Billing dashboard to complete payment.`,
             'approved',
             reservation.id
         );

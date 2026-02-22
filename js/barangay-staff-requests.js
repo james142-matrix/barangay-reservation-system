@@ -67,12 +67,20 @@ function openApprovalModal(requestId) {
     // Check for conflicts with other approved reservations
     let conflictHtml = '';
     const allResv = getAllReservations();
-    const sameDay = allResv.filter(r => 
-        r.facilityId === request.facilityId && 
-        r.eventDate === request.eventDate && 
-        r.status === 'approved' &&
-        r.id !== request.id
-    );
+    // filter approved reservations for same facility whose time range overlaps
+    const reqStart = new Date(`${request.eventStartDate || request.eventDate}T${request.startTime}`);
+    const reqEndDate = request.eventEndDate || request.eventDate;
+    const reqEnd = new Date(`${reqEndDate}T${request.endTime}`);
+
+    const sameDay = allResv.filter(r => {
+        if (r.facilityId !== request.facilityId) return false;
+        if (r.status !== 'approved') return false;
+        if (r.id === request.id) return false;
+        const rStart = new Date(`${r.eventStartDate || r.eventDate}T${r.startTime}`);
+        const rEndDate = r.eventEndDate || r.eventDate;
+        const rEnd = new Date(`${rEndDate}T${r.endTime}`);
+        return !(reqEnd <= rStart || reqStart >= rEnd);
+    });
 
     if (sameDay.length > 0) {
         conflictHtml = '<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin-bottom: 15px; border-radius: 4px;">';
@@ -95,7 +103,7 @@ function openApprovalModal(requestId) {
             <div>
                 <strong style="color: #667eea;">Facility & Booking</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Facility:</strong> ${facilityName}</p>
-                <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventDate).split(' ')[0]}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventStartDate || request.eventDate).split(' ')[0]}${request.eventEndDate && request.eventEndDate !== (request.eventStartDate || request.eventDate) ? ' → ' + formatDate(request.eventEndDate).split(' ')[0] : ''}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Time:</strong> ${request.startTime} - ${request.endTime}</p>
             </div>
         </div>

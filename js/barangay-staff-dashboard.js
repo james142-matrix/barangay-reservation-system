@@ -18,6 +18,7 @@ function loadDashboard() {
     document.getElementById('stat-pending').textContent = stats.pending;
     document.getElementById('stat-approved').textContent = stats.approved;
     document.getElementById('stat-rejected').textContent = stats.rejected;
+    document.getElementById('stat-completed').textContent = stats.completed;
     
     // Display pending requests
     displayPendingRequests();
@@ -62,7 +63,7 @@ function displayPendingRequests() {
             <tr>
                 <td>${user ? user.fullname : r.username}</td>
                 <td>${facility ? facility.name : 'Unknown'}</td>
-                <td>${formatDate(r.eventDate).split(',')[0]}</td>
+                <td>${formatDate(r.eventStartDate || r.eventDate).split(',')[0]}${r.eventEndDate && r.eventEndDate !== (r.eventStartDate || r.eventDate) ? ' → ' + formatDate(r.eventEndDate).split(',')[0] : ''}</td>
                 <td>${submittedDate}</td>
                 <td>
                     <a href="barangay-staff-requests.html" class="btn btn-small btn-primary">Review</a>

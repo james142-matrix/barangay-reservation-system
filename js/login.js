@@ -38,7 +38,22 @@ function login() {
                 if (typeof showToast === 'function') showToast(`Welcome, ${user.fullname || savedUsername}`, 'success');
 
                 const redirectUrl = role === "barangay_staff" ? "barangay-staff-dashboard.html" : (role === 'admin' ? 'admin-dashboard.html' : 'resident-dashboard.html');
-                setTimeout(() => { window.location.href = redirectUrl; }, 800);
+
+                // if the login was handled by Firebase, grab and store the ID token
+                if (isFirebaseUser && firebase && firebase.auth().currentUser) {
+                    firebase.auth().currentUser.getIdToken()
+                        .then(function(token) {
+                            // save token for later API requests
+                            localStorage.setItem('idToken', token);
+                            setTimeout(() => { window.location.href = redirectUrl; }, 800);
+                        })
+                        .catch(function(e) {
+                            console.warn('Failed to get ID token', e);
+                            setTimeout(() => { window.location.href = redirectUrl; }, 800);
+                        });
+                } else {
+                    setTimeout(() => { window.location.href = redirectUrl; }, 800);
+                }
             })
             .catch(function(err) {
                 showMessage(err && err.message ? err.message : "Invalid Username or Password", "error");
@@ -47,20 +62,31 @@ function login() {
     }
 
     // Fallback: Check user accounts (residents and staff) using local DB
+    // Uses async verifyPassword() to correctly handle PBKDF2-hashed passwords
     const user = getUserByUsername(username);
-
-    if (user && user.password === password) {
-        localStorage.setItem("role", user.role);
-        localStorage.setItem("loggedInUser", username);
-        localStorage.setItem("loginTime", new Date().toISOString());
-        if (typeof showToast === 'function') showToast(`Welcome, ${user.fullname || username}`, 'success');
-        
-        // Redirect based on role
-        const redirectUrl = user.role === "barangay_staff" ? "barangay-staff-dashboard.html" : "resident-dashboard.html";
-        setTimeout(() => { window.location.href = redirectUrl; }, 800);
-    } else {
+    if (!user) {
         showMessage("Invalid Username or Password", "error");
+        return;
     }
+
+    verifyPassword(password, user.password).then(function(valid) {
+        if (valid) {
+            localStorage.setItem("role", user.role);
+            localStorage.setItem("loggedInUser", username);
+            localStorage.setItem("loginTime", new Date().toISOString());
+            if (typeof showToast === 'function') showToast(`Welcome, ${user.fullname || username}`, 'success');
+
+            // Redirect based on role
+            const redirectUrl = user.role === "barangay_staff"
+                ? "barangay-staff-dashboard.html"
+                : "resident-dashboard.html";
+            setTimeout(() => { window.location.href = redirectUrl; }, 800);
+        } else {
+            showMessage("Invalid Username or Password", "error");
+        }
+    }).catch(function() {
+        showMessage("Invalid Username or Password", "error");
+    });
 }
 
 function showMessage(message, type) {

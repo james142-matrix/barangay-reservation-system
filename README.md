@@ -37,6 +37,7 @@ This is a fully client-side application using browser's `localStorage` as the da
 - **Auto-logout**: Session management with activity tracking
 
 ### ✅ Resident Features
+- **Email‑Authenticated Login**: Users sign in with username and password; the account’s email must have been verified during signup. During registration the system "sends" a six‑digit code to the provided email (displayed on screen in this demo). Users cannot log in until they enter the correct verification code. If they forget their password they can request an OTP via the forgot‑password page; a simple math captcha guards the request. Firebase integration is optional; if no valid API key is provided the system falls back to local storage authentication.
 - **Dashboard**: Personal statistics and quick access to options
   - Total reservations count
   - Approved reservations
@@ -62,6 +63,20 @@ This is a fully client-side application using browser's `localStorage` as the da
   - Detailed reservation view with all information
   - Cancel pending reservations
   - View rejection reasons if applicable
+- **Billing Dashboard (Resident)**: Handle payments after approval (online or cash on site)
+  - Residents wait for admin/staff approval
+  - Once approved they can visit `billing.html` to settle the balance (link now appears in nav/sidebar and on the dashboard)
+  - Dashboard widget shows current count of unpaid reservations and links directly to billing
+  - Buttons let users "Pay Online" (simulated) or "Mark as Paid (Cash)" for walk‑in payments
+  - Cost is calculated automatically based on duration
+  - After payment the reservation status transitions to **completed/paid** and the item leaves the billing table
+  - A notification is created for every successful payment so the badge and panel update accordingly
+- **Billing Dashboard (Admin/Staff)**: View and record payments for all users
+  - Available under the "Billing" link in the admin/staff interface
+  - Lists every approved reservation that has not yet been paid, across all residents
+  - Staff can mark any reservation as paid on behalf of the resident
+  - Recording a payment sends a notification to the resident and transitions the status to **completed/paid**
+  - Useful when residents pay in person or when staff need to reconcile offline transactions
 
 ### ✅ Admin Features
 - **Admin Dashboard**: System overview and quick statistics

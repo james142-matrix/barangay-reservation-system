@@ -36,12 +36,16 @@ function loadDashboard() {
         pending: reservations.filter(r => r.status === 'pending').length,
         rejected: reservations.filter(r => r.status === 'rejected').length
     };
+    const unpaid = getUnpaidReservationsByUser(user.username).length;
     
     // Update stat cards
     document.getElementById('total-count').textContent = stats.total;
     document.getElementById('approved-count').textContent = stats.approved;
     document.getElementById('pending-count').textContent = stats.pending;
     document.getElementById('rejected-count').textContent = stats.rejected;
+    // update billing card
+    const unpaidElem = document.getElementById('unpaid-count');
+    if (unpaidElem) unpaidElem.textContent = unpaid;
     
     // Display recent reservations
     displayRecentReservations(reservations.slice(0, 5));

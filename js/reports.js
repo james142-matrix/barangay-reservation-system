@@ -31,6 +31,16 @@ function updateReports() {
     document.getElementById('approved-count').textContent = stats.approved;
     document.getElementById('pending-count').textContent = stats.pending;
     document.getElementById('rejected-count').textContent = stats.rejected;
+    document.getElementById('completed-count').textContent = stats.completed;
+
+    // calculate revenue
+    let revenue = 0;
+    reservations.forEach(r => {
+        if (r.paymentStatus === 'paid' || r.paymentStatus === 'cash') {
+            revenue += r.totalCost || 0;
+        }
+    });
+    document.getElementById('revenue-total').textContent = `₱${revenue.toFixed(2)}`;
     
     // Show facility usage
     showFacilityUsage(reservations);
@@ -54,7 +64,8 @@ function calculateStats(reservations) {
         total: reservations.length,
         approved: reservations.filter(r => r.status === 'approved').length,
         pending: reservations.filter(r => r.status === 'pending').length,
-        rejected: reservations.filter(r => r.status === 'rejected').length
+        rejected: reservations.filter(r => r.status === 'rejected').length,
+        completed: reservations.filter(r => r.status === 'completed').length
     };
 }
 
@@ -191,7 +202,7 @@ function showDetailedTable(reservations) {
         html += `<tr>
             <td><strong>${residentName}</strong></td>
             <td>${facilityName}</td>
-            <td>${formatDate(r.eventDate).split(' ')[0]}</td>
+            <td>${formatDate(r.eventStartDate || r.eventDate).split(' ')[0]}${r.eventEndDate && r.eventEndDate !== (r.eventStartDate || r.eventDate) ? ' → ' + formatDate(r.eventEndDate).split(' ')[0] : ''}</td>
             <td>${r.startTime} - ${r.endTime}</td>
             <td><span class="badge ${statusClass}">${r.status.toUpperCase()}</span></td>
             <td>${submitted}</td>

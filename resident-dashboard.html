@@ -15,6 +15,7 @@
             <li><a href="facilities.html">Browse Facilities</a></li>
             <li><a href="reserve.html">Make Reservation</a></li>
             <li><a href="my-reservations.html">My Reservations</a></li>
+            <li><a href="billing.html">Billing</a></li>
             <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
         </ul>
     </nav>
@@ -26,6 +27,7 @@
             <li><a href="facilities.html">🏛️ Facilities</a></li>
             <li><a href="reserve.html">📝 New Reservation</a></li>
             <li><a href="my-reservations.html">📋 My Reservations</a></li>
+            <li><a href="billing.html">💳 Billing</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -60,6 +62,14 @@
                 <p>Track your request status.</p>
                 <a href="my-reservations.html">
                     <button class="btn-success">View Requests</button>
+                </a>
+            </div>
+
+            <div class="card modern-card" id="billing-card">
+                <h3>Billing</h3>
+                <p>Unpaid reservations: <span id="unpaid-count">0</span></p>
+                <a href="billing.html">
+                    <button class="btn-secondary">Go to Billing</button>
                 </a>
             </div>
 

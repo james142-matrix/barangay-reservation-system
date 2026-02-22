@@ -11,10 +11,6 @@
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan</a>
         <ul class="nav-links">
-            <li><a href="resident-dashboard.html">Dashboard</a></li>
-            <li><a href="facilities.html">Browse Facilities</a></li>
-            <li><a href="reserve.html">Make Reservation</a></li>
-            <li><a href="my-reservations.html" class="active">My Reservations</a></li>
             <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
         </ul>
     </nav>
@@ -26,6 +22,7 @@
             <li><a href="facilities.html">🏛️ Facilities</a></li>
             <li><a href="reserve.html">📝 New Reservation</a></li>
             <li><a href="my-reservations.html" class="active">📋 My Reservations</a></li>
+            <li><a href="billing.html">💳 Billing</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -56,6 +53,13 @@
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                 </select>
+                <label for="paymentFilter" style="font-weight: 500;">Payment:</label>
+                <select id="paymentFilter" onchange="filterReservations()" style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; width: 180px;">
+                    <option value="">Any</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                    <option value="cash">Cash</option>
+                </select>
             </div>
         </div>
 
@@ -78,11 +82,14 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeDetailModal()">Close</button>
+                <button class="btn btn-success" id="payBtnModal" onclick="window.location.href='billing.html'" style="display:none;">Pay Now</button>
                 <button class="btn btn-danger" id="cancelBtnModal" onclick="cancelReservation()" style="display:none;">Cancel Reservation</button>
             </div>
         </div>
     </div>
 
+    <!-- include API helper to allow backend calls -->
+    <script src="js/api.js"></script>
     <script src="js/database.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/my-reservations.js"></script>

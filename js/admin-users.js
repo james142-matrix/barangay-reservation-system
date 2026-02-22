@@ -67,7 +67,7 @@ function displayUsers(users) {
                 <td><span class="${roleClass}" style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; background: ${user.role === 'admin' ? '#667eea' : '#4facfe'}; color: white;">${roleLabel}</span></td>
                 <td>
                     <button class="btn-small btn-info" onclick="editUser(${user.id})" style="margin: 0 5px;">✏️ Edit</button>
-                    <button class="btn-small btn-danger" onclick="deleteUserConfirm(${user.id})" style="margin: 0 5px;">🗑️ Delete</button>
+                    <button class="btn-small btn-danger" onclick="deleteUserConfirm(${user.id})" style="margin: 0 5px;">�️ Archive</button>
                 </td>
             </tr>
         `;
@@ -103,6 +103,7 @@ function openAddUserModal() {
     editingUserId = null;
     document.getElementById('modalTitle').textContent = 'Add New User';
     document.getElementById('userForm').reset();
+    document.getElementById('password').placeholder = '';
     document.getElementById('password').required = true;
     document.getElementById('userModal').style.display = 'flex';
 }
@@ -122,7 +123,9 @@ function editUser(id) {
     document.getElementById('fullname').value = user.fullname || '';
     document.getElementById('username').value = user.username;
     document.getElementById('email').value = user.email;
-    document.getElementById('password').value = user.password;
+    // for security we do not prefill the password field
+    document.getElementById('password').value = '';
+    document.getElementById('password').placeholder = 'Leave blank to keep current';
     document.getElementById('password').required = false;
     document.getElementById('phone').value = user.phone || '';
     document.getElementById('address').value = user.address || '';
@@ -158,9 +161,10 @@ function saveUser(event) {
 }
 
 function deleteUserConfirm(id) {
-    if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+    if (confirm('Are you sure you want to archive this user? They will be removed from the list but kept in storage.')) {
+        // archiveUser is invoked by deleteUser underneath
         deleteUser(id);
-        if (typeof showToast === 'function') showToast('User deleted successfully!', 'success');
+        if (typeof showToast === 'function') showToast('User archived successfully!', 'success');
         loadUsers();
     }
 }
