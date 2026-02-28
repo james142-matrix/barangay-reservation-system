@@ -2,7 +2,13 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Allow both admins and residents to access facilities page
     checkAuth();
-    loadFacilities();
+    bindNotificationToggle();
+    loadFacilities().catch(err => {
+        const container = document.getElementById('facilities-container');
+        if (container) {
+            container.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><h3>Failed to load facilities</h3><p>${err.message || 'Unknown error'}</p></div>`;
+        }
+    });
     loadNotifications();
     
     // Auto-refresh notifications every 3 seconds
@@ -15,12 +21,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 let selectedFacility = null;
+let facilitiesCache = [];
 
-function loadFacilities() {
-    const facilities = getAllFacilities();
+async function loadFacilities() {
+    const facilities = await window.api.getFacilities();
+    facilitiesCache = Array.isArray(facilities) ? facilities : [];
     const container = document.getElementById('facilities-container');
     
-    if (facilities.length === 0) {
+    if (facilitiesCache.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="grid-column: 1/-1;">
                 <div class="empty-state-icon">🏢</div>
@@ -32,7 +40,7 @@ function loadFacilities() {
     }
     
     container.innerHTML = '';
-    facilities.forEach(facility => {
+    facilitiesCache.forEach(facility => {
         const card = createFacilityCard(facility);
         container.appendChild(card);
     });
@@ -114,8 +122,7 @@ function closeFacilityModal() {
 
 function goToReserve() {
     if (selectedFacility) {
-        localStorage.setItem('selectedFacilityId', selectedFacility.id);
-        window.location.href = 'reserve.html';
+        window.location.href = `reserve.html?facility=${encodeURIComponent(selectedFacility.id)}`;
     }
 }
 
@@ -156,11 +163,11 @@ function toggleNotifications() {
     
     if (!user || user.role !== 'resident') return;
     
-    if (panel.style.display === "none" || panel.style.display === "") {
-        panel.style.display = "block";
+    if (!panel.classList.contains('show')) {
+        panel.classList.add('show');
         displayNotifications(user.username);
     } else {
-        panel.style.display = "none";
+        panel.classList.remove('show');
     }
 }
 
@@ -229,12 +236,14 @@ function getTimeAgo(dateString) {
 // Close notification panel when clicking outside
 document.addEventListener('click', function(event) {
     const panel = document.getElementById("notificationPanel");
-    const button = event.target.closest('button');
-    
-    if (!button || !button.textContent.includes('Notifications')) {
-        if (event.target.id !== "notificationPanel" && !event.target.closest("#notificationPanel")) {
-            panel.style.display = "none";
-        }
-    }
+    if (!panel) return;
+    if (event.target.closest('#notificationToggleBtn') || event.target.closest('#notificationPanel')) return;
+    panel.classList.remove('show');
 });
+
+function bindNotificationToggle() {
+    const btn = document.getElementById('notificationToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', toggleNotifications);
+}
 

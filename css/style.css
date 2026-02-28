@@ -431,6 +431,7 @@ body {
     gap: 20px;
     margin-top: 14px;
     flex-wrap: wrap;
+    align-items: stretch;
 }
 
 .card {
@@ -457,6 +458,17 @@ body {
 .modern-card p {
     color: #64757f;
     margin-bottom: 14px;
+}
+
+.modern-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-action {
+    margin-top: auto;
+    width: fit-content;
+    min-width: 130px;
 }
 
 .btn-primary, .btn-success {
@@ -594,6 +606,10 @@ tbody tr:last-child td {
     transition: all 0.3s;
     text-decoration: none;
     text-align: center;
+    line-height: 1.2;
+    appearance: none;
+    -webkit-appearance: none;
+    user-select: none;
 }
 
 .btn-primary {
@@ -641,6 +657,11 @@ tbody tr:last-child td {
 .btn-small {
     padding: 6px 12px;
     font-size: 12px;
+}
+
+.btn:focus-visible {
+    outline: 3px solid rgba(102, 126, 234, 0.35);
+    outline-offset: 2px;
 }
 
 /* ===========================
@@ -750,6 +771,7 @@ tbody tr:last-child td {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 25px;
     margin-bottom: 30px;
+    align-items: stretch;
 }
 
 .facility-card {
@@ -759,6 +781,9 @@ tbody tr:last-child td {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     transition: all 0.3s;
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .facility-card:hover {
@@ -779,6 +804,9 @@ tbody tr:last-child td {
 
 .facility-info {
     padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
 }
 
 .facility-info h3 {
@@ -791,6 +819,7 @@ tbody tr:last-child td {
     font-size: 13px;
     color: #888;
     margin-bottom: 15px;
+    min-height: 40px;
 }
 
 .facility-details {
@@ -800,6 +829,10 @@ tbody tr:last-child td {
     margin-bottom: 15px;
     padding-bottom: 12px;
     border-bottom: 1px solid #e0e0e0;
+}
+
+.facility-info .btn {
+    margin-top: auto;
 }
 
 .facility-details small {
@@ -1053,8 +1086,53 @@ tbody tr:last-child td {
     font-weight: bold;
 }
 
-#notificationPanel {
-    animation: slideDown 0.3s ease-out;
+.notification-wrap {
+    position: relative;
+}
+
+.notification-trigger {
+    background: #2a5298;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notification-trigger:hover {
+    background: #224681;
+}
+
+.notification-dot-count {
+    background: #e11d48;
+    color: white;
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-left: 2px;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 20px;
+    text-align: center;
+    display: none;
+}
+
+.notification-panel {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 46px;
+    width: 320px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 500;
+    animation: slideDown 0.2s ease-out;
+}
+
+.notification-panel.show {
+    display: block;
 }
 
 @keyframes slideDown {
@@ -1073,6 +1151,13 @@ tbody tr:last-child td {
     border-bottom: 1px solid #eee;
     cursor: pointer;
     transition: all 0.3s ease;
+}
+
+.billing-info-banner {
+    background: #f5f7fa;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #e7ebf2;
 }
 
 .notification-item:hover {

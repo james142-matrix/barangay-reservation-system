@@ -1,7 +1,10 @@
 // Initialize my reservations page
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('resident');
-    loadMyReservations();
+    bindNotificationToggle();
+    loadMyReservations().catch(err => {
+        showToast('Failed to load reservations: ' + (err.message || 'Unknown error'), 'danger');
+    });
     loadNotifications();
     
     // Auto-refresh notifications every 3 seconds
@@ -14,21 +17,39 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 let selectedReservation = null;
+let currentReservations = [];
+let facilitiesById = new Map();
+
+function normalizeReservation(raw) {
+    if (!raw) return raw;
+    return {
+        ...raw,
+        id: typeof raw.id === 'string' ? parseInt(raw.id, 10) : raw.id,
+        facilityId: raw.facilityId != null ? raw.facilityId : raw.facility_id,
+        eventDate: raw.eventDate || raw.event_date,
+        eventEndDate: raw.eventEndDate || raw.event_end_date,
+        startTime: raw.startTime || raw.start_time,
+        endTime: raw.endTime || raw.end_time,
+        eventType: raw.eventType || raw.event_type || '',
+        expectedGuests: raw.expectedGuests != null ? raw.expectedGuests : (raw.expected_guests ?? 0),
+        eventDescription: raw.eventDescription || raw.event_description || '',
+        contactPerson: raw.contactPerson || raw.contact_person || '',
+        contactPhone: raw.contactPhone || raw.contact_phone || '',
+        createdAt: raw.createdAt || raw.created_at || raw.created || null
+    };
+}
 
 async function loadMyReservations() {
     const user = getLoggedInUser();
-    let reservations = [];
+    const [reservations, facilities] = await Promise.all([
+        window.api.getReservationsByUser(user.username),
+        window.api.getFacilities()
+    ]);
+    facilitiesById = new Map((facilities || []).map(f => [String(f.id), f]));
+    console.log('[my-reservations] loaded from MySQL:', reservations.length);
 
-    // Try MySQL via API first, fall back to localStorage
-    try {
-        reservations = await window.api.getReservationsByUser(user.username);
-        console.log('[my-reservations] loaded from MySQL:', reservations.length);
-    } catch (e) {
-        console.warn('[my-reservations] API unavailable, using localStorage:', e.message);
-        reservations = getReservationsByUser(user.username);
-    }
-
-    displayReservations(reservations);
+    currentReservations = reservations.map(normalizeReservation);
+    displayReservations(currentReservations);
 }
 
 function displayReservations(reservations) {
@@ -63,9 +84,11 @@ function displayReservations(reservations) {
     `;
     
     reservations.forEach(r => {
-        const facility = getFacilityById(r.facilityId);
+        const facility = facilitiesById.get(String(r.facilityId));
         const statusClass = r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending';
-        const createdDate = new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const createdDate = r.createdAt
+            ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '-';
         
         html += `
             <tr>
@@ -92,8 +115,7 @@ function displayReservations(reservations) {
 }
 
 function filterReservations() {
-    const user = getLoggedInUser();
-    const allReservations = getReservationsByUser(user.username);
+    const allReservations = currentReservations;
     const status = document.getElementById('statusFilter').value;
     
     let filtered = allReservations;
@@ -105,14 +127,14 @@ function filterReservations() {
 }
 
 function showReservationDetail(id) {
-    selectedReservation = getReservationById(id);
+    selectedReservation = currentReservations.find(r => String(r.id) === String(id));
     
     if (!selectedReservation) {
         showToast('Reservation not found', 'danger');
         return;
     }
     
-    const facility = getFacilityById(selectedReservation.facilityId);
+    const facility = facilitiesById.get(String(selectedReservation.facilityId));
     const statusClass = selectedReservation.status === 'approved' ? 'approved' : selectedReservation.status === 'rejected' ? 'rejected' : 'pending';
     
     let html = `
@@ -182,29 +204,39 @@ function closeDetailModal() {
 }
 
 async function cancelReservationAction(id) {
-    if (confirm('Are you sure you want to cancel this reservation?')) {
-        try {
-            await window.api.deleteReservation(id);
-        } catch (e) {
-            console.warn('[my-reservations] API delete failed, using localStorage:', e.message);
-            deleteReservation(id);
-        }
+    const doCancel = async () => {
+        await window.api.deleteReservation(id);
         showToast('Reservation cancelled successfully', 'success');
         loadMyReservations();
+    };
+
+    if (typeof showConfirm === 'function') {
+        showConfirm('Are you sure you want to cancel this reservation?', doCancel);
+        return;
+    }
+
+    if (confirm('Are you sure you want to cancel this reservation?')) {
+        await doCancel();
     }
 }
 
 async function cancelReservation() {
-    if (selectedReservation && confirm('Are you sure you want to cancel this reservation?')) {
-        try {
-            await window.api.deleteReservation(selectedReservation.id);
-        } catch (e) {
-            console.warn('[my-reservations] API delete failed, using localStorage:', e.message);
-            deleteReservation(selectedReservation.id);
-        }
+    if (!selectedReservation) return;
+
+    const doCancel = async () => {
+        await window.api.deleteReservation(selectedReservation.id);
         showToast('Reservation cancelled successfully', 'success');
         closeDetailModal();
         loadMyReservations();
+    };
+
+    if (typeof showConfirm === 'function') {
+        showConfirm('Are you sure you want to cancel this reservation?', doCancel);
+        return;
+    }
+
+    if (confirm('Are you sure you want to cancel this reservation?')) {
+        await doCancel();
     }
 }
 
@@ -242,11 +274,11 @@ function toggleNotifications() {
     const panel = document.getElementById("notificationPanel");
     const user = getLoggedInUser();
     
-    if (panel.style.display === "none" || panel.style.display === "") {
-        panel.style.display = "block";
+    if (!panel.classList.contains('show')) {
+        panel.classList.add('show');
         displayNotifications(user.username);
     } else {
-        panel.style.display = "none";
+        panel.classList.remove('show');
     }
 }
 
@@ -315,12 +347,14 @@ function getTimeAgo(dateString) {
 // Close notification panel when clicking outside
 document.addEventListener('click', function(event) {
     const panel = document.getElementById("notificationPanel");
-    const button = event.target.closest('button');
-    
-    if (!button || !button.textContent.includes('Notifications')) {
-        if (event.target.id !== "notificationPanel" && !event.target.closest("#notificationPanel")) {
-            panel.style.display = "none";
-        }
-    }
+    if (!panel) return;
+    if (event.target.closest('#notificationToggleBtn') || event.target.closest('#notificationPanel')) return;
+    panel.classList.remove('show');
 });
+
+function bindNotificationToggle() {
+    const btn = document.getElementById('notificationToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', toggleNotifications);
+}
 

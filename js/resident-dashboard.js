@@ -1,8 +1,11 @@
 // Initialize resident dashboard
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('resident');
+    bindNotificationToggle();
     updateUserName();
-    loadDashboard();
+    loadDashboard().catch(err => {
+        showToast('Failed to load dashboard: ' + (err.message || 'Unknown error'), 'danger');
+    });
     loadNotifications();
     
     // Auto-refresh notifications every 3 seconds
@@ -14,20 +17,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 3000);
 });
 
+function setTextIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
 // Update user name in welcome message
 function updateUserName() {
     const user = getLoggedInUser();
-    if (user) {
-        document.getElementById('username-display').textContent = user.fullname || user.username;
-    }
+    if (user) setTextIfExists('username-display', user.fullname || user.username);
 }
 
-function loadDashboard() {
+async function loadDashboard() {
     const user = getLoggedInUser();
-    const reservations = getReservationsByUser(user.username);
+    const reservations = await window.api.getReservationsByUser(user.username);
+    const facilities = await window.api.getFacilities();
+    const facilityMap = new Map(facilities.map(f => [String(f.id), f]));
     
     // Update username display
-    document.getElementById('username-display').textContent = user.fullname || user.username;
+    setTextIfExists('username-display', user.fullname || user.username);
     
     // Calculate statistics
     const stats = {
@@ -36,23 +44,24 @@ function loadDashboard() {
         pending: reservations.filter(r => r.status === 'pending').length,
         rejected: reservations.filter(r => r.status === 'rejected').length
     };
-    const unpaid = getUnpaidReservationsByUser(user.username).length;
+    const unpaid = reservations.filter(r => r.status === 'approved' && r.paymentStatus !== 'paid' && r.paymentStatus !== 'cash').length;
     
     // Update stat cards
-    document.getElementById('total-count').textContent = stats.total;
-    document.getElementById('approved-count').textContent = stats.approved;
-    document.getElementById('pending-count').textContent = stats.pending;
-    document.getElementById('rejected-count').textContent = stats.rejected;
+    setTextIfExists('total-count', stats.total);
+    setTextIfExists('approved-count', stats.approved);
+    setTextIfExists('pending-count', stats.pending);
+    setTextIfExists('rejected-count', stats.rejected);
     // update billing card
     const unpaidElem = document.getElementById('unpaid-count');
     if (unpaidElem) unpaidElem.textContent = unpaid;
     
     // Display recent reservations
-    displayRecentReservations(reservations.slice(0, 5));
+    displayRecentReservations(reservations.slice(0, 5), facilityMap);
 }
 
-function displayRecentReservations(reservations) {
+function displayRecentReservations(reservations, facilityMap) {
     const container = document.getElementById('recent-reservations');
+    if (!container) return;
     
     if (reservations.length === 0) {
         container.innerHTML = `
@@ -80,7 +89,7 @@ function displayRecentReservations(reservations) {
     `;
     
     reservations.forEach(r => {
-        const facility = getFacilityById(r.facilityId);
+        const facility = facilityMap.get(String(r.facilityId));
         const statusClass = r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending';
         
         html += `
@@ -115,6 +124,7 @@ function loadNotifications() {
 function updateNotificationBadge(username) {
     const unreadCount = getUnreadNotificationsCount(username);
     const badge = document.getElementById("notificationBadge");
+    if (!badge) return;
     
     if (unreadCount > 0) {
         badge.textContent = unreadCount;
@@ -127,17 +137,19 @@ function updateNotificationBadge(username) {
 function toggleNotifications() {
     const panel = document.getElementById("notificationPanel");
     const user = getLoggedInUser();
+    if (!panel || !user) return;
     
-    if (panel.style.display === "none" || panel.style.display === "") {
-        panel.style.display = "block";
+    if (!panel.classList.contains('show')) {
+        panel.classList.add('show');
         displayNotifications(user.username);
     } else {
-        panel.style.display = "none";
+        panel.classList.remove('show');
     }
 }
 
 function displayNotifications(username) {
     const panel = document.getElementById("notificationPanel");
+    if (!panel) return;
     const notifications = getNotificationsByUser(username);
     
     if (notifications.length === 0) {
@@ -201,12 +213,14 @@ function getTimeAgo(dateString) {
 // Close notification panel when clicking outside
 document.addEventListener('click', function(event) {
     const panel = document.getElementById("notificationPanel");
-    const button = event.target.closest('button');
-    
-    if (!button || !button.textContent.includes('Notifications')) {
-        if (event.target.id !== "notificationPanel" && !event.target.closest("#notificationPanel")) {
-            panel.style.display = "none";
-        }
-    }
+    if (!panel) return;
+    if (event.target.closest('#notificationToggleBtn') || event.target.closest('#notificationPanel')) return;
+    panel.classList.remove('show');
 });
+
+function bindNotificationToggle() {
+    const btn = document.getElementById('notificationToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', toggleNotifications);
+}
 

@@ -3,7 +3,10 @@
 
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('resident');
-    loadBillingReservations();
+    bindNotificationToggle();
+    loadBillingReservations().catch(err => {
+        showToast('Failed to load billing reservations: ' + (err.message || 'Unknown error'), 'danger');
+    });
     loadNotifications();
 
     // refresh notification count periodically
@@ -19,17 +22,44 @@ document.addEventListener('DOMContentLoaded', function() {
 // BILLING LOGIC
 // ===========================
 
-function loadBillingReservations() {
+let billingReservations = [];
+let facilitiesById = new Map();
+
+function normalizeReservation(raw) {
+    if (!raw) return raw;
+    return {
+        ...raw,
+        id: typeof raw.id === 'string' ? parseInt(raw.id, 10) : raw.id,
+        facilityId: raw.facilityId != null ? raw.facilityId : raw.facility_id,
+        eventDate: raw.eventDate || raw.event_date,
+        startTime: raw.startTime || raw.start_time,
+        endTime: raw.endTime || raw.end_time,
+        totalCost: raw.totalCost != null ? Number(raw.totalCost) : (raw.total_cost != null ? Number(raw.total_cost) : 0),
+        paymentStatus: raw.paymentStatus || raw.payment_status || 'pending'
+    };
+}
+
+async function loadBillingReservations() {
     const user = getLoggedInUser();
-    const reservations = getUnpaidReservationsByUser(user.username);
+    const [reservationsRaw, facilities] = await Promise.all([
+        window.api.getReservationsByUser(user.username),
+        window.api.getFacilities()
+    ]);
+    let reservations = reservationsRaw;
+    facilitiesById = new Map((facilities || []).map(f => [String(f.id), f]));
+
+    reservations = (reservations || []).map(normalizeReservation);
+    billingReservations = reservations.filter(r =>
+        r.status === 'approved' &&
+        r.paymentStatus !== 'paid' &&
+        r.paymentStatus !== 'cash'
+    );
 
     // debug output
     console.log('billing load for', user && user.username);
-    console.log('unpaid reservations for user:', reservations);
-    const allApproved = getAllReservations().filter(r => r.status === 'approved' && !r.paid);
-    console.log('all approved/unpaid reservations in system:', allApproved);
+    console.log('unpaid reservations for user:', billingReservations);
 
-    displayBillingList(reservations);
+    displayBillingList(billingReservations);
 }
 
 function displayBillingList(reservations) {
@@ -62,7 +92,7 @@ function displayBillingList(reservations) {
     `;
 
     reservations.forEach(r => {
-        const facility = getFacilityById(r.facilityId);
+        const facility = facilitiesById.get(String(r.facilityId));
         html += `
             <tr>
                 <td>${facility ? facility.name : 'Unknown'}</td>
@@ -85,38 +115,80 @@ function displayBillingList(reservations) {
     container.innerHTML = html;
 }
 
-function payOnline(reservationId) {
+async function payOnline(reservationId) {
     console.log('billing.payOnline', reservationId);
-    if (!confirm('Proceed with online payment?')) return;
+    const proceedPayment = async () => {
+        try {
+            const reservation = await window.api.updateReservation(reservationId, {
+                paymentStatus: 'paid',
+                paymentMethod: 'online',
+                paymentDate: new Date().toISOString(),
+                status: 'completed'
+            });
+            console.log('billing.markReservationPaid returned', reservation);
+            if (reservation) {
+                const user = getLoggedInUser();
+                createNotification(user.username, 'Payment Received', `Online payment recorded for reservation ${reservation.id}.`, 'info', reservation.id);
+                showToast('Payment successful', 'success');
+                loadBillingReservations();
+            } else {
+                showToast('Unable to record payment', 'danger');
+                if (typeof showAlert === 'function') {
+                    showAlert('Payment failed - reservation not found.');
+                } else {
+                    alert('Payment failed - reservation not found.');
+                }
+            }
+        } catch (error) {
+            showToast('Payment failed: ' + (error.message || 'Unknown error'), 'danger');
+        }
+    };
 
-    const reservation = markReservationPaid(reservationId);
-    console.log('billing.markReservationPaid returned', reservation);
-    if (reservation) {
-        const user = getLoggedInUser();
-        createNotification(user.username, 'Payment Received', `Online payment recorded for reservation ${reservation.id}.`, 'info', reservation.id);
-        showToast('Payment successful', 'success');
-        loadBillingReservations();
-    } else {
-        showToast('Unable to record payment', 'danger');
-        alert('Payment failed – reservation not found.');
+    if (typeof showConfirm === 'function') {
+        showConfirm('Proceed with online payment?', proceedPayment);
+        return;
     }
+
+    if (!confirm('Proceed with online payment?')) return;
+    await proceedPayment();
 }
 
-function markPaidCash(reservationId) {
+async function markPaidCash(reservationId) {
     console.log('billing.markPaidCash', reservationId);
-    if (!confirm('Mark this reservation as paid (cash)?')) return;
+    const proceedCash = async () => {
+        try {
+            const reservation = await window.api.updateReservation(reservationId, {
+                paymentStatus: 'cash',
+                paymentMethod: 'cash',
+                paymentDate: new Date().toISOString(),
+                status: 'completed'
+            });
+            console.log('billing.markReservationCash returned', reservation);
+            if (reservation) {
+                const user = getLoggedInUser();
+                createNotification(user.username, 'Payment Recorded', `Cash payment marked for reservation ${reservation.id}.`, 'info', reservation.id);
+                showToast('Payment recorded', 'success');
+                loadBillingReservations();
+            } else {
+                showToast('Unable to record payment', 'danger');
+                if (typeof showAlert === 'function') {
+                    showAlert('Payment failed - reservation not found.');
+                } else {
+                    alert('Payment failed - reservation not found.');
+                }
+            }
+        } catch (error) {
+            showToast('Failed to update payment: ' + (error.message || 'Unknown error'), 'danger');
+        }
+    };
 
-    const reservation = markReservationCash(reservationId);
-    console.log('billing.markReservationCash returned', reservation);
-    if (reservation) {
-        const user = getLoggedInUser();
-        createNotification(user.username, 'Payment Recorded', `Cash payment marked for reservation ${reservation.id}.`, 'info', reservation.id);
-        showToast('Payment recorded', 'success');
-        loadBillingReservations();
-    } else {
-        showToast('Unable to record payment', 'danger');
-        alert('Payment failed – reservation not found.');
+    if (typeof showConfirm === 'function') {
+        showConfirm('Mark this reservation as paid (cash)?', proceedCash);
+        return;
     }
+
+    if (!confirm('Mark this reservation as paid (cash)?')) return;
+    await proceedCash();
 }
 
 // ===========================
@@ -144,11 +216,11 @@ function toggleNotifications() {
     const panel = document.getElementById("notificationPanel");
     const user = getLoggedInUser();
     
-    if (panel.style.display === "none" || panel.style.display === "") {
-        panel.style.display = "block";
+    if (!panel.classList.contains('show')) {
+        panel.classList.add('show');
         displayNotifications(user.username);
     } else {
-        panel.style.display = "none";
+        panel.classList.remove('show');
     }
 }
 
@@ -217,11 +289,13 @@ function getTimeAgo(dateString) {
 // close notification panel when clicking outside
 document.addEventListener('click', function(event) {
     const panel = document.getElementById("notificationPanel");
-    const button = event.target.closest('button');
-    
-    if (!button || !button.textContent.includes('Notifications')) {
-        if (event.target.id !== "notificationPanel" && !event.target.closest("#notificationPanel")) {
-            panel.style.display = "none";
-        }
-    }
+    if (!panel) return;
+    if (event.target.closest('#notificationToggleBtn') || event.target.closest('#notificationPanel')) return;
+    panel.classList.remove('show');
 });
+
+function bindNotificationToggle() {
+    const btn = document.getElementById('notificationToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', toggleNotifications);
+}

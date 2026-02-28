@@ -1,17 +1,30 @@
 // Initialize barangay staff dashboard
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('barangay_staff');
-    loadDashboard();
+    loadDashboard().catch(err => {
+        showToast('Failed to load dashboard: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
-function loadDashboard() {
+async function loadDashboard() {
     // Display user greeting
     const user = getLoggedInUser();
     if (user) {
         document.getElementById('user-greeting').textContent = `Welcome, ${user.fullname}`;
     }
 
-    const stats = getReservationStats();
+    const allReservationsRaw = await window.api.getAllReservations();
+    const allReservations = (allReservationsRaw || []).map(r => ({
+        ...r,
+        createdAt: r.createdAt || r.created_at || null
+    }));
+    const stats = {
+        total: allReservations.length,
+        pending: allReservations.filter(r => r.status === 'pending').length,
+        approved: allReservations.filter(r => r.status === 'approved').length,
+        rejected: allReservations.filter(r => r.status === 'rejected').length,
+        completed: allReservations.filter(r => r.status === 'completed').length
+    };
     
     // Update stat cards
     document.getElementById('stat-total').textContent = stats.total;
@@ -21,11 +34,14 @@ function loadDashboard() {
     document.getElementById('stat-completed').textContent = stats.completed;
     
     // Display pending requests
-    displayPendingRequests();
+    displayPendingRequests(allReservations);
 }
 
-function displayPendingRequests() {
-    const allReservations = getAllReservations();
+async function displayPendingRequests(allReservationsInput) {
+    const allReservations = Array.isArray(allReservationsInput) ? allReservationsInput : await window.api.getAllReservations();
+    const [facilities, users] = await Promise.all([window.api.getFacilities(), window.api.getUsers()]);
+    const facilityMap = new Map((facilities || []).map(f => [String(f.id), f]));
+    const userMap = new Map((users || []).map(u => [u.username, u]));
     const pending = allReservations.filter(r => r.status === 'pending').slice(0, 5);
     const container = document.getElementById('pending-requests-list');
     
@@ -55,8 +71,8 @@ function displayPendingRequests() {
     `;
     
     pending.forEach(r => {
-        const facility = getFacilityById(r.facilityId);
-        const user = getUserByUsername(r.username);
+        const facility = facilityMap.get(String(r.facilityId));
+        const user = userMap.get(r.username);
         const submittedDate = new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
         html += `

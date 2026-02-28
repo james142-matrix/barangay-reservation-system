@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 let currentFacilityId = null;
+let currentFacilities = [];
 
 async function loadFacilitiesList() {
     const container = document.getElementById('facilities-list');
@@ -12,21 +13,15 @@ async function loadFacilitiesList() {
 
     let facilities = [];
     try {
-        if (window.api) {
-            facilities = await window.api.getFacilities();
-            // Keep localStorage in sync with server data
-            const db = getDatabase();
-            db.facilities = facilities;
-            saveDatabase(db);
-        } else {
-            facilities = getAllFacilities();
-        }
+        facilities = await window.api.getFacilities();
     } catch (e) {
-        console.warn('Could not load facilities from API, using local', e);
-        facilities = getAllFacilities();
+        console.error('Could not load facilities from API', e);
+        container.innerHTML = '<p style="padding:20px;color:#dc2626;">Failed to load facilities from server.</p>';
+        return;
     }
+    currentFacilities = Array.isArray(facilities) ? facilities : [];
 
-    if (!Array.isArray(facilities) || facilities.length === 0) {
+    if (currentFacilities.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="margin: 0;">
                 <div class="empty-state-icon">🏢</div>
@@ -51,7 +46,7 @@ async function loadFacilitiesList() {
             <tbody>
     `;
 
-    facilities.forEach(facility => {
+    currentFacilities.forEach(facility => {
         const statusColor = facility.status === 'available' ? '#10b981' :
                           facility.status === 'maintenance' ? '#f59e0b' : '#ef4444';
         const price = parseFloat(facility.price) || 0;
@@ -89,7 +84,7 @@ function openAddFacilityModal() {
 }
 
 function editFacility(facilityId) {
-    const facility = getFacilityById(facilityId);
+    const facility = currentFacilities.find(f => String(f.id) === String(facilityId));
     if (!facility) {
         if (typeof showToast === 'function') showToast('Facility not found', 'danger');
         return;
@@ -124,36 +119,10 @@ async function saveFacility() {
 
     try {
         if (currentFacilityId) {
-            // Edit existing facility — try API first, fallback to localStorage
-            if (window.api) {
-                const updated = await window.api.updateFacility(currentFacilityId, facilityData);
-                // Sync to localStorage using the server-returned data
-                updateFacility(String(updated.id || currentFacilityId), facilityData);
-            } else {
-                updateFacility(currentFacilityId, facilityData);
-            }
+            await window.api.updateFacility(currentFacilityId, facilityData);
             if (typeof showToast === 'function') showToast('Facility updated successfully', 'success');
         } else {
-            // Add new facility — try API first, fallback to localStorage
-            if (window.api) {
-                const created = await window.api.createFacility(facilityData);
-                // Save the server-assigned record (with numeric id) to localStorage too
-                addFacility({
-                    id: created.id,
-                    name: created.name,
-                    icon: created.icon || icon,
-                    capacity: created.capacity,
-                    price: created.price,
-                    description: created.description || description,
-                    status: created.status || status
-                });
-            } else {
-                addFacility({
-                    id: 'facility_' + Date.now(),
-                    ...facilityData,
-                    createdAt: new Date().toISOString()
-                });
-            }
+            await window.api.createFacility(facilityData);
             if (typeof showToast === 'function') showToast('Facility added successfully', 'success');
         }
     } catch (e) {
@@ -167,6 +136,13 @@ async function saveFacility() {
 }
 
 function confirmDeleteFacility(facilityId) {
+    if (typeof showConfirm === 'function') {
+        showConfirm('Are you sure you want to delete this facility?', function() {
+            doDeleteFacility(facilityId);
+        });
+        return;
+    }
+
     if (confirm('Are you sure you want to delete this facility?')) {
         doDeleteFacility(facilityId);
     }
@@ -174,13 +150,7 @@ function confirmDeleteFacility(facilityId) {
 
 async function doDeleteFacility(facilityId) {
     try {
-        if (window.api) {
-            await window.api.deleteFacility(facilityId);
-        }
-        // Always remove from localStorage as well
-        const db = getDatabase();
-        db.facilities = db.facilities.filter(f => String(f.id) !== String(facilityId));
-        saveDatabase(db);
+        await window.api.deleteFacility(facilityId);
         if (typeof showToast === 'function') showToast('Facility deleted successfully', 'success');
     } catch (e) {
         console.error('doDeleteFacility error', e);

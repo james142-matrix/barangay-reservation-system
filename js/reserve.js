@@ -1,6 +1,7 @@
 // Initialize reservation page
 document.addEventListener('DOMContentLoaded', async function() {
     checkAuth('resident');
+    bindNotificationToggle();
     try {
         await loadFacilitiesDropdown();
     } catch (e) {
@@ -18,56 +19,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     }, 3000);
 });
 
+let facilitiesCache = [];
+
 async function loadFacilitiesDropdown() {
     const select = document.getElementById('facility');
 
     // always start with the placeholder option
     select.innerHTML = '<option value="">-- Choose a Facility --</option>';
 
-    // Load both API and local facilities, then merge by id.
-    // Admin adds facilities locally, while API may still return a static list.
-    let apiFacilities = [];
-    let localFacilities = [];
-
-    try {
-        apiFacilities = await window.api.getFacilities();
-    } catch (e) {
-        console.warn('Failed to load facilities from API', e);
-    }
-
-    try {
-        localFacilities = getAllFacilities();
-    } catch (e) {
-        console.warn('Failed to load facilities from local database', e);
-    }
-
-    const facilitiesMap = new Map();
-    [...apiFacilities, ...localFacilities].forEach(f => {
-        if (!f || typeof f.id === 'undefined' || f.id === null) return;
-        facilitiesMap.set(String(f.id), f);
-    });
-    let facilities = Array.from(facilitiesMap.values());
+    const facilities = await window.api.getFacilities();
+    facilitiesCache = Array.isArray(facilities) ? facilities : [];
 
     console.log('facilities received for dropdown', facilities);
-    if (!Array.isArray(facilities) || facilities.length === 0) {
-        // if we got something other than an array or an empty list, attempt to
-        // repair the local database and try again once before giving up.
-        if (!Array.isArray(facilities)) {
-            facilities = [];
-        }
 
-        // repopulate defaults so user isn’t stuck with a blank dropdown
-        if (facilities.length === 0) {
-            console.warn('No facilities found; seeding defaults');
-            // run initializer in case database was cleared entirely
-            if (typeof initializeDatabase === 'function') {
-                initializeDatabase();
-            }
-            facilities = getAllFacilities();
-        }
-    }
-
-    if (facilities.length === 0) {
+    if (facilitiesCache.length === 0) {
         select.innerHTML += '<option disabled value="">(no facilities available)</option>';
         // show a warning so the resident understands the problem
         if (typeof showToast === 'function') {
@@ -76,24 +41,27 @@ async function loadFacilitiesDropdown() {
         return;
     }
 
-    facilities.forEach(f => {
+    facilitiesCache.forEach(f => {
         const option = document.createElement('option');
         option.value = f.id;
         option.textContent = `${f.name} (₱${f.price})`;
         select.appendChild(option);
     });
 
-    // if user was coming from the facilities page, a facility id might be stored
-    const stored = localStorage.getItem('selectedFacilityId');
-    if (stored) {
-        const exists = facilities.find(f => f.id === parseInt(stored) || f.id === stored);
+    // if user came from facilities page, facility can be passed by query string
+    const params = new URLSearchParams(window.location.search);
+    const selectedFromQuery = params.get('facility');
+    if (selectedFromQuery) {
+        const exists = facilitiesCache.find(f => String(f.id) === String(selectedFromQuery));
         if (exists) {
             select.value = exists.id;
             updateFacilityPrice();
         }
-        // clear stored value so it doesn't persist across unrelated visits
-        localStorage.removeItem('selectedFacilityId');
     }
+}
+
+function getFacilityFromCache(facilityId) {
+    return facilitiesCache.find(f => String(f.id) === String(facilityId)) || null;
 }
 
 function setupEventListeners() {
@@ -128,9 +96,10 @@ function updateFacilityPrice() {
         return;
     }
     
-    const facility = getFacilityById(facilityId);
+    const facility = getFacilityFromCache(facilityId);
+    const facilityPrice = facility ? Number(facility.price || 0) : 0;
     if (facility) {
-        document.getElementById('facilityPrice').textContent = `₱${facility.price}`;
+        document.getElementById('facilityPrice').textContent = `₱${facilityPrice}`;
         calculateCost();
     }
 }
@@ -148,7 +117,7 @@ function calculateCost() {
         return;
     }
     
-    const facility = getFacilityById(facilityId);
+    const facility = getFacilityFromCache(facilityId);
     const startDt = new Date(`${startDate}T${startTime}`);
     const endDt = new Date(`${endDate}T${endTime}`);
     let durationText = '';
@@ -195,7 +164,7 @@ async function submitReservation(event) {
         return;
     }
     
-    const facility = getFacilityById(facilityId);
+    const facility = getFacilityFromCache(facilityId);
     if (!facility) {
         showToast('Invalid facility selected', 'danger');
         return;
@@ -211,14 +180,7 @@ async function submitReservation(event) {
     const startDt = new Date(`${eventDate}T${startTime}`);
     const endDt = new Date(`${eventEndDate}T${endTime}`);
 
-    // fetch reservations for this user (API or local)
-    let existingReservations = [];
-    try {
-        existingReservations = await window.api.getReservationsByUser(user.username);
-    } catch (e) {
-        console.warn('Could not load reservations from API, using local cache', e);
-        existingReservations = getReservationsByUser(user.username);
-    }
+    const existingReservations = await window.api.getReservationsByUser(user.username);
     const hasConflict = existingReservations.some(r => {
         if (r.status === 'rejected') return false;
         // compare loosely because facilityId may be string or number
@@ -302,11 +264,11 @@ function toggleNotifications() {
     const panel = document.getElementById("notificationPanel");
     const user = getLoggedInUser();
     
-    if (panel.style.display === "none" || panel.style.display === "") {
-        panel.style.display = "block";
+    if (!panel.classList.contains('show')) {
+        panel.classList.add('show');
         displayNotifications(user.username);
     } else {
-        panel.style.display = "none";
+        panel.classList.remove('show');
     }
 }
 
@@ -375,12 +337,14 @@ function getTimeAgo(dateString) {
 // Close notification panel when clicking outside
 document.addEventListener('click', function(event) {
     const panel = document.getElementById("notificationPanel");
-    const button = event.target.closest('button');
-    
-    if (!button || !button.textContent.includes('Notifications')) {
-        if (event.target.id !== "notificationPanel" && !event.target.closest("#notificationPanel")) {
-            panel.style.display = "none";
-        }
-    }
+    if (!panel) return;
+    if (event.target.closest('#notificationToggleBtn') || event.target.closest('#notificationPanel')) return;
+    panel.classList.remove('show');
 });
+
+function bindNotificationToggle() {
+    const btn = document.getElementById('notificationToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', toggleNotifications);
+}
 

@@ -1,3 +1,17 @@
+async function ensureFirebaseUserForSignup(email, password) {
+    if (!window.firebaseAuth || typeof window.firebaseAuth.fetchSignInMethodsForEmail !== "function") {
+        throw new Error("Firebase Auth is not initialized on signup page");
+    }
+
+    const methods = await window.firebaseAuth.fetchSignInMethodsForEmail(email);
+    if (Array.isArray(methods) && methods.length > 0) {
+        return { created: false, user: null };
+    }
+
+    const credential = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
+    return { created: true, user: credential.user || null };
+}
+
 async function signup() {
     const fullname = document.getElementById("fullname").value.trim();
     const email = document.getElementById("email").value.trim();
@@ -18,19 +32,19 @@ async function signup() {
         return;
     }
 
-    if (password.length < 6) {
-        showMessage("Password must be at least 6 characters", "error");
+    if (window.passwordPolicy && typeof window.passwordPolicy.validatePassword === "function") {
+        const policy = window.passwordPolicy.validatePassword(password, username, email);
+        if (!policy.ok) {
+            showMessage(policy.error, "error");
+            return;
+        }
+    } else if (password.length < 8) {
+        showMessage("Password must be at least 8 characters", "error");
         return;
     }
 
     if (password !== confirmPassword) {
         showMessage("Passwords do not match", "error");
-        return;
-    }
-
-    // Check if username already exists
-    if (getUserByUsername(username)) {
-        showMessage("Username already taken, please choose another", "error");
         return;
     }
 
@@ -47,9 +61,9 @@ async function signup() {
         return;
     }
 
+    let firebaseSync = { created: false, user: null };
     try {
-        // Hash the password first so we can send the hash to both MySQL and localStorage
-        const hashedPassword = await hashPassword(password);
+        firebaseSync = await ensureFirebaseUserForSignup(email, password);
 
         const userData = {
             fullname: fullname,
@@ -57,27 +71,14 @@ async function signup() {
             phone: phone,
             address: address,
             username: username,
-            password: hashedPassword,   // already hashed — createUser won't double-hash
+            password: password,
             role: 'resident'
         };
 
-        // 1. Try to save to MySQL via the server API
-        let savedToMySQL = false;
-        if (window.api && typeof window.api.signup === 'function') {
-            try {
-                await window.api.signup(userData);
-                savedToMySQL = true;
-                console.log('[signup] user saved to MySQL');
-            } catch (apiErr) {
-                console.warn('[signup] API unavailable, falling back to localStorage:', apiErr.message);
-            }
-        }
+        await window.api.signup(userData);
 
-        // 2. Always save to localStorage as well (keeps offline mode working)
-        await createUser(userData);
-
-        if (savedToMySQL) {
-            console.log('[signup] user also mirrored to localStorage');
+        if (firebaseSync.created && window.firebaseAuth && typeof window.firebaseAuth.signOut === "function") {
+            await window.firebaseAuth.signOut();
         }
 
         if (typeof showToast === 'function') {
@@ -90,7 +91,35 @@ async function signup() {
             setTimeout(() => { window.location.href = "index.html"; }, 1200);
         }
     } catch (error) {
-        showMessage("Error creating account: " + error.message, "error");
+        if (firebaseSync.created && firebaseSync.user) {
+            try {
+                await firebaseSync.user.delete();
+            } catch (_) {
+                // ignore cleanup errors
+            }
+            try {
+                if (window.firebaseAuth && typeof window.firebaseAuth.signOut === "function") {
+                    await window.firebaseAuth.signOut();
+                }
+            } catch (_) {
+                // ignore cleanup errors
+            }
+        }
+
+        const msg = (error && error.message ? error.message : '').toLowerCase();
+        if (msg.includes('firebase') || msg.includes('auth/')) {
+            showMessage("Cannot create account right now: Firebase signup is not ready. Check Firebase Email/Password + Authorized Domains.", "error");
+            return;
+        }
+        if (msg.includes('username already exists')) {
+            showMessage("Username already taken, please choose another", "error");
+            return;
+        }
+        if (msg.includes('email already exists')) {
+            showMessage("Email is already registered", "error");
+            return;
+        }
+        showMessage("Error creating account: " + (error.message || 'Unknown error'), "error");
     }
 }
 
@@ -145,5 +174,6 @@ document.addEventListener('DOMContentLoaded', function() {
             preview.textContent = v ? `Signing up as: ${v}` : '';
         });
     }
+
 });
 

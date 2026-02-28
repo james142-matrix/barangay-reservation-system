@@ -10,15 +10,6 @@
     <!-- Navbar -->
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan - Admin</a>
-        <ul class="nav-links">
-            <li><a href="admin-dashboard.html">Dashboard</a></li>
-            <li><a href="admin-requests.html" class="active">Approval Requests</a></li>
-            <li><a href="admin-billing.html">Billing</a></li>
-            <li><a href="admin-users.html">Users</a></li>
-            <li><a href="admin-facilities.html">Manage Facilities</a></li>
-            <li><a href="reports.html">Reports</a></li>
-            <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
-        </ul>
     </nav>
 
     <!-- Sidebar -->
@@ -43,10 +34,10 @@
         <!-- Filters -->
         <div class="table-container" style="margin-bottom: 20px;">
             <div style="padding: 15px; display: flex; gap: 15px; align-items: center;">
-                <input 
-                    type="text" 
-                    id="searchInput" 
-                    placeholder="Search by resident name or facility..." 
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Search by resident name or facility..."
                     onkeyup="filterRequests()"
                     style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; flex: 1; max-width: 400px;">
                 <select id="statusFilter" onchange="filterRequests()" style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; width: 200px;">
@@ -73,8 +64,7 @@
                 <h2>Review Request</h2>
                 <button class="close-modal" onclick="closeApprovalModal()">×</button>
             </div>
-            <div class="modal-body" id="approvalBody">
-            </div>
+            <div class="modal-body" id="approvalBody"></div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeApprovalModal()">Close</button>
                 <button class="btn btn-danger" id="rejectBtnModal" onclick="showRejectForm()">Reject</button>
@@ -103,136 +93,9 @@
 
     <script src="js/database.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/api.js"></script>
     <script src="js/admin-requests.js"></script>
     <script src="js/responsive.js"></script>
 </body>
 </html>
-        </div>
 
-        <!-- Requests Table -->
-        <div id="requestsContainer">
-            <div class="loading">
-                <div class="spinner"></div>
-                <p>Loading reservation requests...</p>
-            </div>
-        </div>
-
-        <!-- Empty State -->
-        <div id="emptyState" class="empty-state" style="display: none;">
-            <i class="fas fa-check"></i>
-            <h2>All Caught Up!</h2>
-            <p>No pending reservation requests</p>
-        </div>
-    </div>
-
-    <!-- Request Details Modal -->
-    <div id="requestModal" class="modal">
-        <div class="modal-content wide">
-            <div class="modal-header">
-                <h2>Reservation Request Details</h2>
-                <button class="modal-close" onclick="closeRequestModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="request-details">
-                    <div class="detail-section">
-                        <h3>Resident Information</h3>
-                        <div class="details-grid">
-                            <div class="detail-item">
-                                <span class="label">Name:</span>
-                                <span class="value" id="detailResidentName"></span>
-                            </div>
-                            <div class="detail-item">
-                                <span class="label">Username:</span>
-                                <span class="value" id="detailUsername"></span>
-                            </div>
-                            <div class="detail-item">
-                                <span class="label">Contact:</span>
-                                <span class="value" id="detailContact"></span>
-                            </div>
-                            <div class="detail-item">
-                                <span class="label">Email:</span>
-                                <span class="value" id="detailEmail"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="detail-section">
-                        <h3>Facility Details</h3>
-                        <div class="details-grid">
-                            <div class="detail-item">
-                                <span class="label">Facility:</span>
-                                <span class="value" id="detailFacility"></span>
-                            </div>
-                            <div class="detail-item">
-                                <span class="label">Date:</span>
-                                <span class="value" id="detailDate"></span>
-                            </div>
-                            <div class="detail-item">
-                                <span class="label">Time:</span>
-                                <span class="value" id="detailTime"></span>
-                            </div>
-                            <div class="detail-item">
-                                <span class="label">Attendees:</span>
-                                <span class="value" id="detailAttendees"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="detail-section">
-                        <h3>Event Information</h3>
-                        <div class="detail-item">
-                            <span class="label">Purpose:</span>
-                            <span class="value" id="detailPurpose"></span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Special Requirements:</span>
-                            <span class="value" id="detailRequirements"></span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Submitted:</span>
-                            <span class="value" id="detailSubmitted"></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Action Section -->
-                <div id="actionSection" style="display: none;">
-                    <div class="action-form">
-                        <h3>Admin Action</h3>
-                        <div class="form-group">
-                            <label>
-                                <input type="radio" name="action" value="approve" checked> Approve Request
-                            </label>
-                            <label>
-                                <input type="radio" name="action" value="reject"> Reject Request
-                            </label>
-                        </div>
-                        <div id="rejectReason" style="display: none;">
-                            <label for="rejectionComment">Rejection Reason (required):</label>
-                            <textarea id="rejectionComment" rows="3" placeholder="Explain why this request is being rejected..."></textarea>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeRequestModal()">Close</button>
-                <div id="actionButtons" style="display: none;">
-                    <button class="btn btn-success" onclick="approveRequest()">
-                        <i class="fas fa-check"></i> Approve
-                    </button>
-                    <button class="btn btn-danger" onclick="rejectRequest()">
-                        <i class="fas fa-times"></i> Reject
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <script src="js/database.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/admin-requests.js"></script>
-</body>
-</html>
-</body>
-</html>

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone         VARCHAR(20)   DEFAULT NULL,
   address       TEXT          DEFAULT NULL,
   role          VARCHAR(50)   NOT NULL DEFAULT 'resident',
+  force_password_change TINYINT(1) NOT NULL DEFAULT 0,
   archived      TINYINT(1)    NOT NULL DEFAULT 0,
   created_at    TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -51,28 +52,52 @@ CREATE TABLE IF NOT EXISTS facilities (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS reservations (
   id                INT AUTO_INCREMENT PRIMARY KEY,
-  username          VARCHAR(100)   NOT NULL,
+  username          VARCHAR(255)   NOT NULL,
   facility_id       INT            NOT NULL,
   event_date        DATE           NOT NULL,
-  start_time        VARCHAR(10)    NOT NULL,
-  end_time          VARCHAR(10)    NOT NULL,
+  event_end_date    DATE           NULL,
+  start_time        TIME           NOT NULL,
+  end_time          TIME           NOT NULL,
   event_type        VARCHAR(100)   DEFAULT NULL,
   expected_guests   INT            DEFAULT 0,
   event_description TEXT           DEFAULT NULL,
   contact_person    VARCHAR(255)   DEFAULT NULL,
-  contact_phone     VARCHAR(20)    DEFAULT NULL,
-  status            VARCHAR(50)    NOT NULL DEFAULT 'pending',
+  contact_phone     VARCHAR(50)    DEFAULT NULL,
   total_cost        DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
-  payment_status    VARCHAR(50)    NOT NULL DEFAULT 'pending',
+  status            VARCHAR(50)    NOT NULL DEFAULT 'pending',
+  approved_by       VARCHAR(255)   DEFAULT NULL,
+  approved_at       DATETIME       NULL DEFAULT NULL,
+  payment_status    VARCHAR(50)    DEFAULT 'pending',
   payment_method    VARCHAR(50)    DEFAULT NULL,
-  payment_date      TIMESTAMP      NULL DEFAULT NULL,
-  approved_at       TIMESTAMP      NULL DEFAULT NULL,
-  approved_by       VARCHAR(100)   DEFAULT NULL,
+  payment_date      DATETIME       NULL DEFAULT NULL,
   rejection_reason  TEXT           DEFAULT NULL,
-  rejected_at       TIMESTAMP      NULL DEFAULT NULL,
-  rejected_by       VARCHAR(100)   DEFAULT NULL,
+  rejected_by       VARCHAR(255)   DEFAULT NULL,
+  rejected_at       DATETIME       NULL DEFAULT NULL,
   created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ============================================================
+-- TABLE: billing_transactions
+-- One row per payment transaction (ledger/audit trail)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS billing_transactions (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  reservation_id  INT            NOT NULL,
+  username        VARCHAR(255)   NOT NULL,
+  facility_id     INT            NULL,
+  amount          DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
+  payment_status  VARCHAR(20)    NOT NULL,
+  payment_method  VARCHAR(50)    DEFAULT NULL,
+  payment_date    DATETIME       NOT NULL,
+  recorded_by     VARCHAR(255)   DEFAULT NULL,
+  notes           TEXT           DEFAULT NULL,
+  created_at      TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_res_payment (reservation_id, payment_status, payment_date),
+  KEY idx_bt_username (username),
+  KEY idx_bt_payment_date (payment_date),
+  CONSTRAINT fk_bt_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bt_facility FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE SET NULL
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -90,27 +115,15 @@ CREATE TABLE IF NOT EXISTS notifications (
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- ============================================================
--- TABLE: verification_codes (for email signup/forgot password)
--- ============================================================
-CREATE TABLE IF NOT EXISTS verification_codes (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  email       VARCHAR(255)  NOT NULL,
-  code        VARCHAR(10)   NOT NULL,
-  expires_at  TIMESTAMP     NOT NULL,
-  created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- ============================================================
 -- DEFAULT DATA: Admin account
--- Password: admin123 (stored as plaintext for demo;
---           the system will upgrade to PBKDF2 hash on first login)
+-- Default demo credentials are kept for local testing.
 -- ============================================================
-INSERT IGNORE INTO users (id, username, password, email, fullname, phone, address, role, archived)
+INSERT IGNORE INTO users (id, username, password, email, fullname, phone, address, role, force_password_change, archived)
 VALUES
-  (1, 'admin',    'admin123',   'admin@barangay.ph',    'System Administrator', '09000000000', 'Barangay Molugan, Iloilo', 'admin',          0),
-  (2, 'staff1',   'staff123',   'staff1@barangay.ph',   'Maria Santos',         '09223456789', 'Molugan, Iloilo',          'barangay_staff', 0),
-  (3, 'staff2',   'staff123',   'staff2@barangay.ph',   'Pedro Reyes',          '09323456789', 'Molugan, Iloilo',          'barangay_staff', 0),
-  (4, 'resident1','resident123','resident1@barangay.ph','Juan Dela Cruz',        '09123456789', 'Molugan, Iloilo',          'resident',       0);
+  (1, 'admin',    'admin123',   'admin@barangay.ph',    'System Administrator', '09000000000', 'Barangay Molugan, Iloilo', 'admin',          0, 0),
+  (2, 'staff1',   'staff123',   'staff1@barangay.ph',   'Maria Santos',         '09223456789', 'Molugan, Iloilo',          'barangay_staff', 0, 0),
+  (3, 'staff2',   'staff123',   'staff2@barangay.ph',   'Pedro Reyes',          '09323456789', 'Molugan, Iloilo',          'barangay_staff', 0, 0),
+  (4, 'resident1','resident123','resident1@barangay.ph','Juan Dela Cruz',        '09123456789', 'Molugan, Iloilo',          'resident',       0, 0);
 
 -- ============================================================
 -- DEFAULT DATA: 6 Facilities

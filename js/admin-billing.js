@@ -2,28 +2,30 @@
 // Shared billing dashboard logic for admin and barangay_staff roles
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Determine role from localStorage and guard access
-    const role = localStorage.getItem('role');
+    bindBillingEventHandlers();
+
+    const user = getLoggedInUser();
+    const role = user ? user.role : null;
     if (role === 'admin') {
         checkAuth('admin');
     } else {
         checkAuth('barangay_staff');
     }
 
-    loadBillingStats();
-    loadAllBillingReservations();
+    loadAllBillingReservations().catch(err => {
+        showToast('Failed to load billing data: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
 // ===========================
 // STATS
 // ===========================
 
-function loadBillingStats() {
-    const reservations = getAllReservations();
+function loadBillingStats(reservations) {
 
     const totalRevenue = reservations
         .filter(r => r.paymentStatus === 'paid' || r.paymentStatus === 'cash')
-        .reduce((sum, r) => sum + (r.totalCost || 0), 0);
+        .reduce((sum, r) => sum + toAmount(r.totalCost), 0);
 
     const pendingPayments = reservations.filter(
         r => r.status === 'approved' &&
@@ -47,15 +49,23 @@ function loadBillingStats() {
 
 let allBillingRows = []; // cache for client-side filtering
 
-function loadAllBillingReservations() {
-    const reservations = getAllReservations();
+async function loadAllBillingReservations() {
+    const [reservations, facilities, users] = await Promise.all([
+        window.api.getAllReservations(),
+        window.api.getFacilities(),
+        window.api.getUsers()
+    ]);
+    const facilityMap = new Map((facilities || []).map(f => [String(f.id), f]));
+    const userMap = new Map((users || []).map(u => [u.username, u]));
+    loadBillingStats(reservations);
 
     // Enrich each row with facility and user info for display / filtering
     allBillingRows = reservations.map(r => {
-        const facility = getFacilityById(r.facilityId);
-        const user     = getUserByUsername(r.username);
+        const facility = facilityMap.get(String(r.facilityId));
+        const user     = userMap.get(r.username);
         return {
             ...r,
+            createdAt: r.createdAt || r.created_at || null,
             facilityName: facility ? facility.name : 'Unknown Facility',
             residentName: user ? user.fullname : r.username
         };
@@ -104,10 +114,11 @@ function renderBillingTable(rows) {
         const payBadge     = getPaymentStatusBadge(r.paymentStatus);
         const eventDate    = r.eventDate ? formatDateOnly(r.eventDate) : '—';
         const timeRange    = (r.startTime && r.endTime) ? `${r.startTime} – ${r.endTime}` : '—';
-        const amount       = typeof r.totalCost === 'number' ? '₱' + r.totalCost.toFixed(2) : '₱0.00';
+        const amount       = '₱' + toAmount(r.totalCost).toLocaleString('en-PH', { minimumFractionDigits: 2 });
         const canConfirmCash = r.status === 'approved' &&
                                r.paymentStatus !== 'paid' &&
                                r.paymentStatus !== 'cash';
+        const rowId = JSON.stringify(String(r.id));
 
         html += `
             <tr>
@@ -123,8 +134,8 @@ function renderBillingTable(rows) {
                 <td>${resvBadge}</td>
                 <td>${payBadge}</td>
                 <td>
-                    <button class="btn btn-small btn-secondary" onclick="viewBillingDetail(${r.id})" title="View Details">🔍 View</button>
-                    ${canConfirmCash ? `<button class="btn btn-small btn-success" onclick="adminConfirmCash(${r.id})" title="Confirm Cash Payment" style="margin-top:4px;">💵 Confirm Cash</button>` : ''}
+                    <button class="btn btn-small btn-secondary" data-billing-action="view" data-reservation-id=${rowId} title="View Details" type="button">🔍 View</button>
+                    ${canConfirmCash ? `<button class="btn btn-small btn-success" data-billing-action="confirm-cash" data-reservation-id=${rowId} title="Confirm Cash Payment" style="margin-top:4px;" type="button">💵 Confirm Cash</button>` : ''}
                 </td>
             </tr>`;
     });
@@ -138,27 +149,35 @@ function renderBillingTable(rows) {
 // ===========================
 
 function filterBillingTable() {
-    const search      = (document.getElementById('billingSearch')?.value || '').toLowerCase();
+    const search      = normalizeSearch(document.getElementById('billingSearch')?.value || '');
     const payFilter   = document.getElementById('paymentFilter')?.value || '';
     const resvFilter  = document.getElementById('resvStatusFilter')?.value || '';
     const dateFrom    = document.getElementById('dateFrom')?.value || '';
     const dateTo      = document.getElementById('dateTo')?.value || '';
 
     const filtered = allBillingRows.filter(r => {
+        const residentName = normalizeText(r.residentName);
+        const username = normalizeText(r.username);
+        const facilityName = normalizeText(r.facilityName);
+        const paymentStatusLabel = normalizeText(getPaymentStatusLabel(r.paymentStatus));
+        const reservationStatusLabel = normalizeText(r.status);
+
         const matchSearch = !search ||
-            r.residentName.toLowerCase().includes(search) ||
-            r.username.toLowerCase().includes(search) ||
-            r.facilityName.toLowerCase().includes(search);
+            residentName.includes(search) ||
+            username.includes(search) ||
+            facilityName.includes(search) ||
+            paymentStatusLabel.includes(search) ||
+            reservationStatusLabel.includes(search);
 
         const matchPay  = !payFilter  || r.paymentStatus === payFilter;
         const matchResv = !resvFilter || r.status === resvFilter;
 
         let matchDate = true;
         if (dateFrom || dateTo) {
-            const eventDate = r.eventDate ? new Date(r.eventDate) : null;
+            const eventDate = parseLocalDate(r.eventDate);
             if (eventDate) {
-                if (dateFrom && eventDate < new Date(dateFrom)) matchDate = false;
-                if (dateTo   && eventDate > new Date(dateTo + 'T23:59:59')) matchDate = false;
+                if (dateFrom && eventDate < parseLocalDate(dateFrom)) matchDate = false;
+                if (dateTo   && eventDate > parseLocalDate(dateTo + 'T23:59:59')) matchDate = false;
             }
         }
 
@@ -172,7 +191,7 @@ function filterBillingTable() {
 function updateFilteredStats(filtered) {
     const revenue = filtered
         .filter(r => r.paymentStatus === 'paid' || r.paymentStatus === 'cash')
-        .reduce((s, r) => s + (r.totalCost || 0), 0);
+        .reduce((s, r) => s + toAmount(r.totalCost), 0);
 
     const el = document.getElementById('filtered-revenue');
     if (el) el.textContent = '₱' + revenue.toLocaleString('en-PH', { minimumFractionDigits: 2 });
@@ -192,10 +211,14 @@ function clearFilters() {
 // ===========================
 
 function adminConfirmCash(reservationId) {
-    showConfirm('Confirm this reservation as paid by cash?', function () {
-        const reservation = markReservationCash(reservationId);
-        if (reservation) {
-            // Notify the resident
+    showConfirm('Confirm this reservation as paid by cash?', async function () {
+        try {
+            const reservation = await window.api.updateReservation(reservationId, {
+                paymentStatus: 'cash',
+                paymentMethod: 'cash',
+                paymentDate: new Date().toISOString(),
+                status: 'completed'
+            });
             createNotification(
                 reservation.username,
                 'Payment Confirmed',
@@ -204,10 +227,9 @@ function adminConfirmCash(reservationId) {
                 reservation.id
             );
             showToast('Cash payment confirmed successfully.', 'success');
-            loadBillingStats();
             loadAllBillingReservations();
-        } else {
-            showToast('Could not find reservation.', 'danger');
+        } catch (error) {
+            showToast('Failed to confirm cash payment: ' + (error.message || 'Unknown error'), 'danger');
         }
     });
 }
@@ -217,11 +239,11 @@ function adminConfirmCash(reservationId) {
 // ===========================
 
 function viewBillingDetail(reservationId) {
-    const r = getReservationById(reservationId);
+    const r = allBillingRows.find(row => String(row.id) === String(reservationId));
     if (!r) { showToast('Reservation not found.', 'danger'); return; }
 
-    const facility = getFacilityById(r.facilityId);
-    const user     = getUserByUsername(r.username);
+    const facilityName = r.facilityName || 'Unknown';
+    const residentName = r.residentName || r.username;
 
     const modal   = document.getElementById('billingDetailModal');
     const body    = document.getElementById('billingDetailBody');
@@ -234,12 +256,12 @@ function viewBillingDetail(reservationId) {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">RESIDENT</p>
-                <p style="font-weight:600;">${escHtml(user ? user.fullname : r.username)}</p>
+                <p style="font-weight:600;">${escHtml(residentName)}</p>
                 <p style="font-size:13px; color:#666;">@${escHtml(r.username)}</p>
             </div>
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">FACILITY</p>
-                <p style="font-weight:600;">${escHtml(facility ? facility.name : 'Unknown')}</p>
+                <p style="font-weight:600;">${escHtml(facilityName)}</p>
             </div>
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">EVENT DATE</p>
@@ -251,7 +273,7 @@ function viewBillingDetail(reservationId) {
             </div>
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">AMOUNT</p>
-                <p style="font-weight:700; font-size:20px; color:#667eea;">₱${(r.totalCost || 0).toFixed(2)}</p>
+                <p style="font-weight:700; font-size:20px; color:#667eea;">₱${toAmount(r.totalCost).toFixed(2)}</p>
             </div>
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">PAYMENT METHOD</p>
@@ -298,6 +320,18 @@ function closeBillingDetailModal() {
 
 // Close modal on backdrop click
 document.addEventListener('click', function (e) {
+    const actionButton = e.target.closest('[data-billing-action]');
+    if (actionButton) {
+        const action = actionButton.getAttribute('data-billing-action');
+        const reservationId = actionButton.getAttribute('data-reservation-id');
+        if (action === 'view') {
+            viewBillingDetail(reservationId);
+        } else if (action === 'confirm-cash') {
+            adminConfirmCash(reservationId);
+        }
+        return;
+    }
+
     const modal = document.getElementById('billingDetailModal');
     if (modal && e.target === modal) closeBillingDetailModal();
 });
@@ -322,7 +356,7 @@ function exportBillingCSV() {
             r.eventDate || '',
             r.startTime || '',
             r.endTime   || '',
-            (r.totalCost || 0).toFixed(2),
+            toAmount(r.totalCost).toFixed(2),
             r.status,
             r.paymentStatus || 'pending',
             r.paymentMethod || '',
@@ -365,6 +399,60 @@ function getPaymentStatusBadge(paymentStatus) {
         return `<span class="status-badge approved" style="background:#d1ecf1; color:#0c5460;">Cash Paid</span>`;
     }
     return `<span class="status-badge pending">Unpaid</span>`;
+}
+
+function getPaymentStatusLabel(paymentStatus) {
+    if (paymentStatus === 'paid') return 'online paid';
+    if (paymentStatus === 'cash') return 'cash paid';
+    return 'unpaid';
+}
+
+function normalizeText(value) {
+    return String(value == null ? '' : value).toLowerCase().trim();
+}
+
+function normalizeSearch(value) {
+    return normalizeText(value).replace(/^@+/, '');
+}
+
+function toAmount(value) {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+    }
+    if (typeof value === 'string') {
+        const parsed = parseFloat(value.replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+}
+
+function parseLocalDate(value) {
+    if (!value) return null;
+    if (typeof value !== 'string') {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+    const hasTime = value.includes('T') || value.includes(' ');
+    const candidate = hasTime ? value : `${value}T00:00:00`;
+    const date = new Date(candidate);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function bindBillingEventHandlers() {
+    const bind = (id, event, handler) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener(event, handler);
+    };
+
+    bind('billingSearch', 'input', filterBillingTable);
+    bind('paymentFilter', 'change', filterBillingTable);
+    bind('resvStatusFilter', 'change', filterBillingTable);
+    bind('dateFrom', 'change', filterBillingTable);
+    bind('dateTo', 'change', filterBillingTable);
+    bind('billingClearBtn', 'click', clearFilters);
+    bind('billingExportBtn', 'click', exportBillingCSV);
+    bind('billingModalCloseTop', 'click', closeBillingDetailModal);
+    bind('billingModalCloseBottom', 'click', closeBillingDetailModal);
 }
 
 function escHtml(str) {

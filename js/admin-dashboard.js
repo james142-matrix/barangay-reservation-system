@@ -1,27 +1,50 @@
 // Initialize admin dashboard
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('admin');
-    loadDashboard();
+    loadDashboard().catch(err => {
+        showToast('Failed to load dashboard: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
-function loadDashboard() {
-    const stats = getReservationStats();
-    
-    // Update stat cards
-    document.getElementById('stat-total').textContent = stats.total;
-    document.getElementById('stat-pending').textContent = stats.pending;
-    document.getElementById('stat-approved').textContent = stats.approved;
-    document.getElementById('stat-rejected').textContent = stats.rejected;
-    document.getElementById('stat-completed').textContent = stats.completed;
-    
-    // Display pending requests
-    displayPendingRequests();
+function setTextIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
 }
 
-function displayPendingRequests() {
-    const allReservations = getAllReservations();
+async function loadDashboard() {
+    const allReservationsRaw = await window.api.getAllReservations();
+    const allReservations = (allReservationsRaw || []).map(r => ({
+        ...r,
+        createdAt: r.createdAt || r.created_at || null
+    }));
+    const stats = {
+        total: allReservations.length,
+        pending: allReservations.filter(r => r.status === 'pending').length,
+        approved: allReservations.filter(r => r.status === 'approved').length,
+        rejected: allReservations.filter(r => r.status === 'rejected').length,
+        completed: allReservations.filter(r => r.status === 'completed').length
+    };
+    
+    // Update stat cards
+    setTextIfExists('stat-total', stats.total);
+    setTextIfExists('stat-pending', stats.pending);
+    setTextIfExists('stat-approved', stats.approved);
+    setTextIfExists('stat-rejected', stats.rejected);
+    setTextIfExists('stat-completed', stats.completed);
+    
+    // Display pending requests
+    displayPendingRequests(allReservations);
+}
+
+async function displayPendingRequests(allReservationsInput) {
+    const allReservations = Array.isArray(allReservationsInput) ? allReservationsInput : await window.api.getAllReservations();
+    const facilities = await window.api.getFacilities();
+    const users = await window.api.getUsers();
+    const facilityMap = new Map(facilities.map(f => [String(f.id), f]));
+    const userMap = new Map(users.map(u => [u.username, u]));
     const pending = allReservations.filter(r => r.status === 'pending').slice(0, 5);
     const container = document.getElementById('pending-requests-list');
+    if (!container) return;
     
     if (pending.length === 0) {
         container.innerHTML = `
@@ -49,8 +72,8 @@ function displayPendingRequests() {
     `;
     
     pending.forEach(r => {
-        const facility = getFacilityById(r.facilityId);
-        const user = getUserByUsername(r.username);
+        const facility = facilityMap.get(String(r.facilityId));
+        const user = userMap.get(r.username);
         const submittedDate = new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
         html += `

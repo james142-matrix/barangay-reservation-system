@@ -1,42 +1,75 @@
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth('barangay_staff');
-    loadRequests();
+    loadRequests().catch(err => {
+        showToast('Failed to load requests: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
-// Global variable to track current selected request
+// Global state
 let currentRequest = null;
+let currentRequests = [];
+let usersByUsername = new Map();
+let facilitiesById = new Map();
 
-// Load and display all requests
-function loadRequests() {
-    const allReservations = getAllReservations();
-    displayRequests(allReservations);
+function normalizeReservation(raw) {
+    if (!raw) return raw;
+    return {
+        ...raw,
+        id: typeof raw.id === 'string' ? parseInt(raw.id, 10) : raw.id,
+        facilityId: raw.facilityId != null ? raw.facilityId : raw.facility_id,
+        eventDate: raw.eventDate || raw.event_date,
+        eventStartDate: raw.eventStartDate || raw.event_start_date || raw.eventDate || raw.event_date,
+        eventEndDate: raw.eventEndDate || raw.event_end_date,
+        startTime: raw.startTime || raw.start_time,
+        endTime: raw.endTime || raw.end_time,
+        eventType: raw.eventType || raw.event_type || '',
+        expectedGuests: raw.expectedGuests != null ? raw.expectedGuests : (raw.expected_guests ?? 0),
+        eventDescription: raw.eventDescription || raw.event_description || '',
+        contactPerson: raw.contactPerson || raw.contact_person || '',
+        contactPhone: raw.contactPhone || raw.contact_phone || '',
+        totalCost: raw.totalCost != null ? Number(raw.totalCost) : (raw.total_cost != null ? Number(raw.total_cost) : 0),
+        approvedBy: raw.approvedBy || raw.approved_by || null,
+        approvedAt: raw.approvedAt || raw.approved_at || null,
+        rejectionReason: raw.rejectionReason || raw.rejection_reason || null,
+        createdAt: raw.createdAt || raw.created_at || null
+    };
 }
 
-// Display requests in table format
+async function loadRequests() {
+    const [allReservations, users, facilities] = await Promise.all([
+        window.api.getAllReservations(),
+        window.api.getUsers(),
+        window.api.getFacilities()
+    ]);
+    usersByUsername = new Map((users || []).map(u => [u.username, u]));
+    facilitiesById = new Map((facilities || []).map(f => [String(f.id), f]));
+    currentRequests = (allReservations || []).map(normalizeReservation);
+    displayRequests(currentRequests);
+}
+
 function displayRequests(requests) {
     const listContainer = document.getElementById('requests-list');
-    
+
     if (!requests || requests.length === 0) {
         listContainer.innerHTML = '<div style="padding: 40px; text-align: center; color: #999;"><p>No reservation requests found.</p></div>';
         return;
     }
 
-    // Sort by date, most recent first
-    const sortedRequests = requests.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const sortedRequests = [...requests].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     let html = '<table class="table">';
     html += '<thead><tr><th>Resident</th><th>Facility</th><th>Event Date</th><th>Time</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead>';
     html += '<tbody>';
 
     sortedRequests.forEach(req => {
-        const resident = getUserByUsername(req.username);
-        const facility = getFacilityById(req.facilityId);
-        const residentName = resident ? resident.fullname : 'Unknown Resident';
-        const facilityName = facility ? facility.name : 'Unknown Facility';
+        const resident = usersByUsername.get(req.username);
+        const facility = facilitiesById.get(String(req.facilityId));
+        const residentName = resident ? resident.fullname : req.username;
+        const facilityName = facility ? facility.name : `Facility #${req.facilityId}`;
         const statusClass = req.status === 'pending' ? 'pending' : (req.status === 'approved' ? 'approved' : 'rejected');
-        const submittedDate = new Date(req.createdAt);
-        const formattedSubmitted = submittedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const submittedDate = req.createdAt ? new Date(req.createdAt) : null;
+        const formattedSubmitted = submittedDate ? submittedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
 
         html += '<tr>';
         html += `<td><strong>${residentName}</strong></td>`;
@@ -53,21 +86,18 @@ function displayRequests(requests) {
     listContainer.innerHTML = html;
 }
 
-// Open approval modal with request details
 function openApprovalModal(requestId) {
-    const request = getReservationById(requestId);
+    const request = currentRequests.find(r => String(r.id) === String(requestId));
     if (!request) return;
 
     currentRequest = request;
-    const resident = getUserByUsername(request.username);
-    const facility = getFacilityById(request.facilityId);
-    const residentName = resident ? resident.fullname : 'Unknown';
-    const facilityName = facility ? facility.name : 'Unknown';
+    const resident = usersByUsername.get(request.username);
+    const facility = facilitiesById.get(String(request.facilityId));
+    const residentName = resident ? resident.fullname : request.username;
+    const facilityName = facility ? facility.name : `Facility #${request.facilityId}`;
 
-    // Check for conflicts with other approved reservations
     let conflictHtml = '';
-    const allResv = getAllReservations();
-    // filter approved reservations for same facility whose time range overlaps
+    const allResv = currentRequests;
     const reqStart = new Date(`${request.eventStartDate || request.eventDate}T${request.startTime}`);
     const reqEndDate = request.eventEndDate || request.eventDate;
     const reqEnd = new Date(`${reqEndDate}T${request.endTime}`);
@@ -105,6 +135,7 @@ function openApprovalModal(requestId) {
                 <p style="margin: 5px 0; color: #666;"><strong>Facility:</strong> ${facilityName}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventStartDate || request.eventDate).split(' ')[0]}${request.eventEndDate && request.eventEndDate !== (request.eventStartDate || request.eventDate) ? ' → ' + formatDate(request.eventEndDate).split(' ')[0] : ''}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Time:</strong> ${request.startTime} - ${request.endTime}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Cost:</strong> ₱${Number(request.totalCost || 0).toFixed(2)}</p>
             </div>
         </div>
 
@@ -117,7 +148,7 @@ function openApprovalModal(requestId) {
             <div>
                 <strong style="color: #667eea;">Status</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Current:</strong> <span class="badge ${request.status}">${request.status.toUpperCase()}</span></p>
-                <p style="margin: 5px 0; color: #666;"><strong>Submitted:</strong> ${formatDate(request.createdAt)}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Submitted:</strong> ${request.createdAt ? formatDate(request.createdAt) : '-'}</p>
             </div>
         </div>
 
@@ -129,7 +160,6 @@ function openApprovalModal(requestId) {
         ${conflictHtml}
     `;
 
-    // Show rejection reason if already rejected
     if (request.status === 'rejected' && request.rejectionReason) {
         approvalBody += `
             <div style="background: #f8d7da; border-left: 4px solid #f5c6cb; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
@@ -139,7 +169,6 @@ function openApprovalModal(requestId) {
         `;
     }
 
-    // Show approval date if already approved
     if (request.status === 'approved' && request.approvedBy) {
         approvalBody += `
             <div style="background: #d4edda; border-left: 4px solid #c3e6cb; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
@@ -151,10 +180,9 @@ function openApprovalModal(requestId) {
 
     document.getElementById('approvalBody').innerHTML = approvalBody;
 
-    // Only show action buttons if pending
     const approveBtnModal = document.getElementById('approveBtnModal');
     const rejectBtnModal = document.getElementById('rejectBtnModal');
-    
+
     if (request.status === 'pending') {
         approveBtnModal.style.display = 'block';
         rejectBtnModal.style.display = 'block';
@@ -163,24 +191,28 @@ function openApprovalModal(requestId) {
         rejectBtnModal.style.display = 'none';
     }
 
-    // Show modal
     document.getElementById('approvalModal').classList.add('show');
 }
 
-// Approve the reservation
-function approveResv() {
+async function approveResv() {
     if (!currentRequest) return;
 
-    // Get staff username
     const staff = getLoggedInUser();
-    
-    // Approve using database function
-    approveReservation(currentRequest.id, staff.username);
 
-    // Create notification for the resident
-    const reservation = getReservationById(currentRequest.id);
+    try {
+        currentRequest = await window.api.updateReservation(currentRequest.id, {
+            status: 'approved',
+            approvedBy: staff.username,
+            approvedAt: new Date().toISOString()
+        });
+    } catch (e) {
+        showToast('Failed to approve reservation: ' + (e.message || 'Unknown error'), 'danger');
+        return;
+    }
+
+    const reservation = normalizeReservation(currentRequest);
     if (reservation) {
-        const facility = getFacilityById(reservation.facilityId);
+        const facility = facilitiesById.get(String(reservation.facilityId));
         const facilityName = facility ? facility.name : 'Your facility';
         createNotification(
             reservation.username,
@@ -191,41 +223,42 @@ function approveResv() {
         );
     }
 
-    // Show success message
     showToast('Reservation approved successfully!', 'success');
-
-    // Close modal and reload
     closeApprovalModal();
     loadRequests();
 }
 
-// Show rejection reason form
 function showRejectForm() {
     document.getElementById('rejectionReason').value = '';
     document.getElementById('rejectReasonModal').classList.add('show');
 }
 
-// Submit rejection
-function submitRejection() {
+async function submitRejection() {
     if (!currentRequest) return;
 
     const reason = document.getElementById('rejectionReason').value.trim();
-    
     if (!reason) {
         showToast('Please provide a rejection reason', 'warning');
         return;
     }
 
-    // Get staff username
     const staff = getLoggedInUser();
 
-    // Reject using database function
-    rejectReservation(currentRequest.id, reason, staff.username);
+    try {
+        currentRequest = await window.api.updateReservation(currentRequest.id, {
+            status: 'rejected',
+            rejectionReason: reason,
+            rejectedBy: staff.username,
+            rejectedAt: new Date().toISOString()
+        });
+    } catch (e) {
+        showToast('Failed to reject reservation: ' + (e.message || 'Unknown error'), 'danger');
+        return;
+    }
 
-    // Create notification for the resident
-    const reservation = getReservationById(currentRequest.id);
+    const reservation = normalizeReservation(currentRequest);
     if (reservation) {
-        const facility = getFacilityById(reservation.facilityId);
+        const facility = facilitiesById.get(String(reservation.facilityId));
         const facilityName = facility ? facility.name : 'Your facility';
         createNotification(
             reservation.username,
@@ -236,46 +269,37 @@ function submitRejection() {
         );
     }
 
-    // Show success message
     showToast('Reservation rejected successfully!', 'success');
-
-    // Close modals and reload
     closeRejectModal();
     closeApprovalModal();
     loadRequests();
 }
 
-// Close approval modal
 function closeApprovalModal() {
     currentRequest = null;
     document.getElementById('approvalModal').classList.remove('show');
 }
 
-// Close rejection modal
 function closeRejectModal() {
     document.getElementById('rejectReasonModal').classList.remove('show');
 }
 
-// Filter requests based on search and status
 function filterRequests() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const statusFilter = document.getElementById('statusFilter').value;
 
-    let allReservations = getAllReservations();
+    let allReservations = [...currentRequests];
 
-    // Filter by search term
     if (searchTerm) {
         allReservations = allReservations.filter(req => {
-            const resident = getUserByUsername(req.username);
-            const facility = getFacilityById(req.facilityId);
-            const residentName = resident ? resident.fullname.toLowerCase() : '';
+            const resident = usersByUsername.get(req.username);
+            const facility = facilitiesById.get(String(req.facilityId));
+            const residentName = resident ? resident.fullname.toLowerCase() : req.username.toLowerCase();
             const facilityName = facility ? facility.name.toLowerCase() : '';
-
             return residentName.includes(searchTerm) || facilityName.includes(searchTerm);
         });
     }
 
-    // Filter by status
     if (statusFilter) {
         allReservations = allReservations.filter(req => req.status === statusFilter);
     }
@@ -283,7 +307,6 @@ function filterRequests() {
     displayRequests(allReservations);
 }
 
-// Close modals when clicking outside
 document.addEventListener('click', function(event) {
     const approvalModal = document.getElementById('approvalModal');
     const rejectReasonModal = document.getElementById('rejectReasonModal');

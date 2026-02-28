@@ -1,16 +1,52 @@
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth('admin');
-    loadRequests();
+    loadRequests().catch(err => {
+        showToast('Failed to load requests: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
 // Global variable to track current selected request
 let currentRequest = null;
+let currentRequests = [];
+let usersByUsername = new Map();
+let facilitiesById = new Map();
+
+function normalizeReservation(raw) {
+    if (!raw) return raw;
+    return {
+        ...raw,
+        id: typeof raw.id === 'string' ? parseInt(raw.id, 10) : raw.id,
+        facilityId: raw.facilityId != null ? raw.facilityId : raw.facility_id,
+        eventDate: raw.eventDate || raw.event_date,
+        eventStartDate: raw.eventStartDate || raw.event_start_date || raw.eventDate || raw.event_date,
+        eventEndDate: raw.eventEndDate || raw.event_end_date,
+        startTime: raw.startTime || raw.start_time,
+        endTime: raw.endTime || raw.end_time,
+        eventType: raw.eventType || raw.event_type || '',
+        expectedGuests: raw.expectedGuests != null ? raw.expectedGuests : (raw.expected_guests ?? 0),
+        eventDescription: raw.eventDescription || raw.event_description || '',
+        contactPerson: raw.contactPerson || raw.contact_person || '',
+        contactPhone: raw.contactPhone || raw.contact_phone || '',
+        totalCost: raw.totalCost != null ? Number(raw.totalCost) : (raw.total_cost != null ? Number(raw.total_cost) : 0),
+        approvedBy: raw.approvedBy || raw.approved_by || null,
+        approvedAt: raw.approvedAt || raw.approved_at || null,
+        rejectionReason: raw.rejectionReason || raw.rejection_reason || null,
+        createdAt: raw.createdAt || raw.created_at || null
+    };
+}
 
 // Load and display all requests
-function loadRequests() {
-    const allReservations = getAllReservations();
-    displayRequests(allReservations);
+async function loadRequests() {
+    const [allReservations, users, facilities] = await Promise.all([
+        window.api.getAllReservations(),
+        window.api.getUsers(),
+        window.api.getFacilities()
+    ]);
+    usersByUsername = new Map((users || []).map(u => [u.username, u]));
+    facilitiesById = new Map((facilities || []).map(f => [String(f.id), f]));
+    currentRequests = (allReservations || []).map(normalizeReservation);
+    displayRequests(currentRequests);
 }
 
 // Display requests in table format
@@ -23,20 +59,20 @@ function displayRequests(requests) {
     }
 
     // Sort by date, most recent first
-    const sortedRequests = requests.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const sortedRequests = [...requests].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     let html = '<table class="table">';
     html += '<thead><tr><th>Resident</th><th>Facility</th><th>Event Date</th><th>Time</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead>';
     html += '<tbody>';
 
     sortedRequests.forEach(req => {
-        const resident = getUserByUsername(req.username);
-        const facility = getFacilityById(req.facilityId);
+        const resident = usersByUsername.get(req.username);
+        const facility = facilitiesById.get(String(req.facilityId));
         const residentName = resident ? resident.fullname : 'Unknown Resident';
         const facilityName = facility ? facility.name : 'Unknown Facility';
         const statusClass = req.status === 'pending' ? 'pending' : (req.status === 'approved' ? 'approved' : 'rejected');
-        const submittedDate = new Date(req.createdAt);
-        const formattedSubmitted = submittedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const submittedDate = req.createdAt ? new Date(req.createdAt) : null;
+        const formattedSubmitted = submittedDate ? submittedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
 
         html += '<tr>';
         html += `<td><strong>${residentName}</strong></td>`;
@@ -55,18 +91,18 @@ function displayRequests(requests) {
 
 // Open approval modal with request details
 function openApprovalModal(requestId) {
-    const request = getReservationById(requestId);
+    const request = currentRequests.find(r => String(r.id) === String(requestId));
     if (!request) return;
 
     currentRequest = request;
-    const resident = getUserByUsername(request.username);
-    const facility = getFacilityById(request.facilityId);
+    const resident = usersByUsername.get(request.username);
+    const facility = facilitiesById.get(String(request.facilityId));
     const residentName = resident ? resident.fullname : 'Unknown';
     const facilityName = facility ? facility.name : 'Unknown';
 
     // Check for conflicts with other approved reservations
     let conflictHtml = '';
-    const allResv = getAllReservations();
+    const allResv = currentRequests;
     const sameDay = allResv.filter(r => 
         r.facilityId === request.facilityId && 
         r.eventDate === request.eventDate && 
@@ -97,7 +133,7 @@ function openApprovalModal(requestId) {
                 <p style="margin: 5px 0; color: #666;"><strong>Facility:</strong> ${facilityName}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventStartDate || request.eventDate).split(' ')[0]}${request.eventEndDate && request.eventEndDate !== (request.eventStartDate || request.eventDate) ? ' → ' + formatDate(request.eventEndDate).split(' ')[0] : ''}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Time:</strong> ${request.startTime} - ${request.endTime}</p>
-                <p style="margin: 5px 0; color: #666;"><strong>Cost:</strong> ₱${request.totalCost ? request.totalCost.toFixed(2) : '0.00'}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Cost:</strong> ₱${Number(request.totalCost || 0).toFixed(2)}</p>
             </div>
         </div>
 
@@ -161,19 +197,27 @@ function openApprovalModal(requestId) {
 }
 
 // Approve the reservation
-function approveResv() {
+async function approveResv() {
     if (!currentRequest) return;
 
     // Get admin username
     const admin = getLoggedInUser();
     
-    // Approve using database function
-    approveReservation(currentRequest.id, admin.username);
+    try {
+        currentRequest = await window.api.updateReservation(currentRequest.id, {
+            status: 'approved',
+            approvedBy: admin.username,
+            approvedAt: new Date().toISOString()
+        });
+    } catch (e) {
+        showToast('Failed to approve reservation: ' + (e.message || 'Unknown error'), 'danger');
+        return;
+    }
 
     // Create notification for the resident
-    const reservation = getReservationById(currentRequest.id);
+    const reservation = normalizeReservation(currentRequest);
     if (reservation) {
-        const facility = getFacilityById(reservation.facilityId);
+        const facility = facilitiesById.get(String(reservation.facilityId));
         const facilityName = facility ? facility.name : 'Your facility';
         createNotification(
             reservation.username,
@@ -199,7 +243,7 @@ function showRejectForm() {
 }
 
 // Submit rejection
-function submitRejection() {
+async function submitRejection() {
     if (!currentRequest) return;
 
     const reason = document.getElementById('rejectionReason').value.trim();
@@ -212,13 +256,22 @@ function submitRejection() {
     // Get admin username
     const admin = getLoggedInUser();
 
-    // Reject using database function
-    rejectReservation(currentRequest.id, reason, admin.username);
+    try {
+        currentRequest = await window.api.updateReservation(currentRequest.id, {
+            status: 'rejected',
+            rejectionReason: reason,
+            rejectedBy: admin.username,
+            rejectedAt: new Date().toISOString()
+        });
+    } catch (e) {
+        showToast('Failed to reject reservation: ' + (e.message || 'Unknown error'), 'danger');
+        return;
+    }
 
     // Create notification for the resident
-    const reservation = getReservationById(currentRequest.id);
+    const reservation = normalizeReservation(currentRequest);
     if (reservation) {
-        const facility = getFacilityById(reservation.facilityId);
+        const facility = facilitiesById.get(String(reservation.facilityId));
         const facilityName = facility ? facility.name : 'Your facility';
         createNotification(
             reservation.username,
@@ -254,13 +307,13 @@ function filterRequests() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const statusFilter = document.getElementById('statusFilter').value;
 
-    let allReservations = getAllReservations();
+    let allReservations = [...currentRequests];
 
     // Filter by search term
     if (searchTerm) {
         allReservations = allReservations.filter(req => {
-            const resident = getUserByUsername(req.username);
-            const facility = getFacilityById(req.facilityId);
+            const resident = usersByUsername.get(req.username);
+            const facility = facilitiesById.get(String(req.facilityId));
             const residentName = resident ? resident.fullname.toLowerCase() : '';
             const facilityName = facility ? facility.name.toLowerCase() : '';
 

@@ -2,7 +2,10 @@
    DATABASE SIMULATION using localStorage
    =========================== */
 
-// Initialize database
+// Legacy in-memory fallback object (non-persistent).
+let legacyDbCache = null;
+
+// Initialize in-memory database (no localStorage persistence)
 function initializeDatabase() {
     const defaultData = {
         users: [
@@ -97,79 +100,20 @@ function initializeDatabase() {
         adminApprovals: [],
         notifications: []
     };
-
-    // Check if data exists, if not initialize
-    if (!localStorage.getItem("barangayDB")) {
-        localStorage.setItem("barangayDB", JSON.stringify(defaultData));
-    } else {
-        // Update existing database with new features
-        const existingData = JSON.parse(localStorage.getItem("barangayDB"));
-        
-        // Ensure notifications array exists
-        if (!existingData.notifications) {
-            existingData.notifications = [];
-        }
-        
-        // Ensure payment fields exist on existing reservations
-        if (existingData.reservations) {
-            existingData.reservations.forEach(r => {
-                if (typeof r.paymentStatus === 'undefined') {
-                    r.paymentStatus = 'pending';
-                }
-                if (typeof r.paymentMethod === 'undefined') {
-                    r.paymentMethod = null;
-                }
-                if (typeof r.totalCost === 'undefined') {
-                    r.totalCost = 0;
-                }
-                // completed status was introduced later; default remains as-is
-            });
-        }
-        
-        // Ensure staff users exist in the database
-        const staffUsers = [
-            {
-                id: 2,
-                username: "staff1",
-                password: "staff123",
-                email: "staff1@barangay.ph",
-                fullname: "Maria Santos",
-                phone: "09223456789",
-                address: "Molugan, Iloilo",
-                role: "barangay_staff"
-            },
-            {
-                id: 3,
-                username: "staff2",
-                password: "staff123",
-                email: "staff2@barangay.ph",
-                fullname: "Pedro Reyes",
-                phone: "09323456789",
-                address: "Molugan, Iloilo",
-                role: "barangay_staff"
-            }
-        ];
-        
-        // Add staff users if they don't already exist
-        staffUsers.forEach(staffUser => {
-            if (!existingData.users.find(u => u.username === staffUser.username)) {
-                existingData.users.push(staffUser);
-            }
-        });
-        
-        localStorage.setItem("barangayDB", JSON.stringify(existingData));
+    if (!legacyDbCache) {
+        legacyDbCache = JSON.parse(JSON.stringify(defaultData));
     }
 }
 
 // Get all data
 function getDatabase() {
     initializeDatabase();
-    return JSON.parse(localStorage.getItem("barangayDB"));
+    return JSON.parse(JSON.stringify(legacyDbCache));
 }
 
 // Save database
 function saveDatabase(data) {
-    localStorage.setItem("barangayDB", JSON.stringify(data));
+    legacyDbCache = JSON.parse(JSON.stringify(data));
 }
 
 // ===========================
@@ -569,7 +513,6 @@ function markReservationCash(id) {
     return updateReservation(id, updates);
 }
 
-
 // ===========================
 // BILLING HELPER FUNCTIONS
 // ===========================
@@ -585,7 +528,7 @@ function getUnpaidReservationsByUser(username) {
     );
 }
 
-// Convenience wrapper used by billing.js -- marks a reservation as paid online
+// Convenience wrapper used by billing.js — marks a reservation as paid online
 function markReservationPaid(id) {
     return payReservation(id, 'online');
 }
@@ -612,7 +555,6 @@ function getReservationStats() {
 // ===========================
 
 function createNotification(username, title, message, type = 'info', reservationId = null) {
-    const db = getDatabase();
     const newNotification = {
         id: Date.now(),
         username: username,
@@ -623,41 +565,67 @@ function createNotification(username, title, message, type = 'info', reservation
         createdAt: new Date().toISOString(),
         reservationId: reservationId
     };
-    db.notifications.push(newNotification);
-    saveDatabase(db);
+    // Persist notification to MySQL API only.
+    if (window.api && typeof window.api.createNotification === 'function') {
+        window.api.createNotification({
+            username: username,
+            title: title,
+            message: message,
+            type: type,
+            reservationId: reservationId
+        }).catch(err => {
+            console.warn('[notifications] API create failed:', err.message || err);
+        });
+    }
+
     return newNotification;
 }
 
 function getNotificationsByUser(username) {
-    const db = getDatabase();
-    return db.notifications.filter(n => n.username === username).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Pull latest from MySQL (sync signature required by existing UI calls).
+    try {
+        if (window.api && typeof window.api.getNotificationsByUser === 'function') {
+            const xhr = new XMLHttpRequest();
+            const base = window.API_BASE_URL || 'http://localhost:3000';
+            xhr.open('GET', `${base}/notifications?user=${encodeURIComponent(username)}`, false);
+            xhr.withCredentials = true;
+            xhr.send();
+            if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
+                return JSON.parse(xhr.responseText).map(r => ({
+                    id: r.id,
+                    username: r.username,
+                    title: r.title,
+                    message: r.message,
+                    type: r.type || 'info',
+                    read: !!(r.isRead || r.is_read),
+                    createdAt: r.createdAt || r.created_at || new Date().toISOString(),
+                    reservationId: r.reservationId ?? r.reservation_id ?? null
+                }));
+            }
+        }
+    } catch (e) {
+        console.warn('[notifications] API get failed:', e.message || e);
+    }
+    return [];
 }
 
 function markNotificationAsRead(notificationId) {
-    const db = getDatabase();
-    const notification = db.notifications.find(n => n.id === parseInt(notificationId));
-    if (notification) {
-        notification.read = true;
-        saveDatabase(db);
+    if (window.api && typeof window.api.markNotificationAsRead === 'function') {
+        window.api.markNotificationAsRead(notificationId).catch(err => {
+            console.warn('[notifications] API mark-read failed:', err.message || err);
+        });
     }
-    return notification;
+    return { id: parseInt(notificationId, 10), read: true };
 }
 
 function markAllNotificationsAsRead(username) {
-    const db = getDatabase();
-    db.notifications.forEach(n => {
-        if (n.username === username && !n.read) {
-            n.read = true;
-        }
-    });
-    saveDatabase(db);
+    const notifications = getNotificationsByUser(username);
+    notifications.filter(n => !n.read).forEach(n => markNotificationAsRead(n.id));
 }
 
 function getUnreadNotificationsCount(username) {
-    const db = getDatabase();
-    return db.notifications.filter(n => n.username === username && !n.read).length;
+    return getNotificationsByUser(username).filter(n => !n.read).length;
 }
 
 // Initialize database on load
 initializeDatabase();
-

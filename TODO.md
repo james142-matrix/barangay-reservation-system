@@ -1,16 +1,17 @@
-# Fix: Signup not saving to MySQL + Login broken
+# TODO / Change Log
 
-## Bugs Found
-- [x] Bug 1: `signup.js` — `createUser()` called WITHOUT `await` (race condition)
-- [x] Bug 2: `auth-service.js` — plain text `===` comparison vs PBKDF2 hash (login always fails)
-- [x] Bug 3: `login.js` fallback — same plain text comparison bug
-- [x] Bug 4: Server has NO signup/login routes → MySQL never used
+## Resolved
 
-## Fix Steps
-- [x] Step 1: Update `server/index.js` — add users table init + POST /users + POST /users/login
-- [x] Step 2: Update `js/api.js` — add signup() and loginUser() API methods
-- [x] Step 3: Update `js/signup.js` — await createUser() + try API first, fallback to localStorage
-- [x] Step 4: Update `js/services/auth-service.js` — fix localLogin() to use verifyPassword() + try API first
-- [x] Step 5: Update `js/login.js` — fix fallback plain-text comparison to use async verifyPassword()
+- Fixed signup persistence path so user creation no longer races.
+- Fixed login verification mismatch by using proper password verification logic.
+- Updated login fallback handling to avoid plaintext-comparison behavior.
+- Added/validated backend auth and user routes needed for online mode.
+- Normalized all project Markdown docs for consistency and accuracy.
 
-## ALL FIXES COMPLETE ✅
+## Next
+
+- Add automated regression tests for signup/login/reset.
+- Add API contract tests for reservations and billing flows.
+- Add markdown linting in CI to prevent doc drift.
+
+Last updated: 2026-02-28

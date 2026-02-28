@@ -10,15 +10,7 @@
     <!-- Navbar -->
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan</a>
-        <ul class="nav-links">
-            <li><a href="resident-dashboard.html">Dashboard</a></li>
-            <li><a href="facilities.html">Browse Facilities</a></li>
-            <li><a href="reserve.html">Make Reservation</a></li>
-            <li><a href="my-reservations.html">My Reservations</a></li>
-            <li><a href="billing.html" class="active">Billing</a></li>
-            <li><a href="#" onclick="logout()" class="logout-btn">Logout</a></li>
-        </ul>
-    </nav>
+</nav>
 
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -36,18 +28,17 @@
     <main class="main-content">
         <div class="dashboard-header">
             <h1>Billing Dashboard</h1>
-            <div style="position:relative;">
-                <button onclick="toggleNotifications()" style="background:#2a5298; color:white; padding:8px 15px; border:none; border-radius:5px; cursor:pointer;">
-                    🔔 Notifications <span id="notificationBadge" style="background:red; color:white; padding:2px 6px; border-radius:50%; margin-left:5px; font-size:12px;"></span>
+            <div class="notification-wrap">
+                <button id="notificationToggleBtn" class="btn notification-trigger" type="button">
+                    🔔 Notifications <span id="notificationBadge" class="notification-dot-count"></span>
                 </button>
-                <div id="notificationPanel" style="display:none; position:absolute; right:0; top:40px; width:300px; background:white; border:1px solid #ddd; border-radius:8px; box-shadow:0 5px 15px rgba(0,0,0,0.2); max-height:400px; overflow-y:auto; z-index:100;">
-                </div>
+                <div id="notificationPanel" class="notification-panel"></div>
             </div>
         </div>
 
-        <div class="table-container" style="max-width:1200px;">
+        <div class="table-container billing-shell" style="max-width:1200px;">
             <div style="margin-bottom:20px; font-size:14px; color:#555;">
-                <div style="background:#f5f7fa; padding:15px; border-radius:8px;">
+                <div class="billing-info-banner">
                     After your reservation is <em>approved</em> by barangay staff or admin, you can settle the
                     payment here. Choose <strong>Pay Online</strong> or <strong>Mark as Paid (Cash)</strong> if you'll pay in person at the
                     barangay office. Once payment is recorded the reservation becomes fully confirmed.
@@ -61,7 +52,9 @@
 
     <script src="js/database.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/api.js"></script>
     <script src="js/billing.js"></script>
     <script src="js/responsive.js"></script>
 </body>
 </html>
+

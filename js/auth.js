@@ -1,17 +1,43 @@
+let __sessionUserCache = null;
+let __sessionUserCacheTs = 0;
+
+function fetchSessionUserSync() {
+    const now = Date.now();
+    if (__sessionUserCache && (now - __sessionUserCacheTs) < 3000) {
+        return __sessionUserCache;
+    }
+
+    try {
+        const xhr = new XMLHttpRequest();
+        const base = window.API_BASE_URL || 'http://localhost:3000';
+        xhr.open('GET', `${base}/auth/me`, false);
+        xhr.withCredentials = true;
+        xhr.send();
+        if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
+            __sessionUserCache = JSON.parse(xhr.responseText);
+            __sessionUserCacheTs = now;
+            return __sessionUserCache;
+        }
+    } catch (e) {
+        // ignore and return null
+    }
+    __sessionUserCache = null;
+    __sessionUserCacheTs = now;
+    return null;
+}
+
 // Check authentication
 function checkAuth(requiredRole) {
-    const userRole = localStorage.getItem("role");
-    const loggedInUser = localStorage.getItem("loggedInUser");
-
-    if (!userRole || !loggedInUser) {
+    const user = getLoggedInUser();
+    if (!user) {
         window.location.href = "index.html";
         return;
     }
 
-    if (requiredRole && userRole !== requiredRole) {
-        if (userRole === "admin") {
+    if (requiredRole && user.role !== requiredRole) {
+        if (user.role === "admin") {
             window.location.href = "admin-dashboard.html";
-        } else if (userRole === "barangay_staff") {
+        } else if (user.role === "barangay_staff") {
             window.location.href = "barangay-staff-dashboard.html";
         } else {
             window.location.href = "resident-dashboard.html";
@@ -22,16 +48,25 @@ function checkAuth(requiredRole) {
 // Logout function
 function logout() {
     showConfirm("Are you sure you want to logout?", function() {
-        localStorage.removeItem("role");
-        localStorage.removeItem("loggedInUser");
-        localStorage.removeItem("loginTime");
-        window.location.href = "index.html";
+        const redirect = () => { window.location.href = "index.html"; };
+        __sessionUserCache = null;
+        __sessionUserCacheTs = 0;
+        if (window.AuthService && typeof window.AuthService.logout === 'function') {
+            window.AuthService.logout().finally(redirect);
+            return;
+        }
+        if (window.api && typeof window.api.logout === 'function') {
+            window.api.logout().finally(redirect);
+            return;
+        }
+        redirect();
     });
 }
 
-// Reusable custom confirm modal
-function showConfirm(message, onConfirm) {
-    // prevent multiple modals
+// Reusable custom confirm/alert modal
+function showDialog(options) {
+    if (!options || !options.message) return;
+    // prevent multiple dialogs
     if (document.getElementById('confirmModal')) return;
 
     const overlay = document.createElement('div');
@@ -43,24 +78,26 @@ function showConfirm(message, onConfirm) {
 
     const title = document.createElement('div');
     title.style.cssText = `font-weight:600; margin-bottom:8px; font-size:16px;`;
-    title.textContent = 'Are you sure';
+    title.textContent = options.title || 'Notice';
 
     const text = document.createElement('p');
     text.style.cssText = `color: #d1d5db; margin: 0 0 18px 0; font-size:14px;`;
-    text.textContent = message;
+    text.textContent = options.message;
 
     const actions = document.createElement('div');
     actions.style.cssText = `display:flex; gap:10px; justify-content:flex-end; margin-top:6px;`;
 
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = `background: transparent; color:#cbd5e1; border:none; padding:8px 14px; border-radius:8px; cursor:pointer;`;
-
     const okBtn = document.createElement('button');
-    okBtn.textContent = 'OK';
+    okBtn.textContent = options.okText || 'OK';
     okBtn.style.cssText = `background:#e6eefc; color:#0b1220; border:none; padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600;`;
 
-    actions.appendChild(cancelBtn);
+    let cancelBtn = null;
+    if (options.showCancel) {
+        cancelBtn = document.createElement('button');
+        cancelBtn.textContent = options.cancelText || 'Cancel';
+        cancelBtn.style.cssText = `background: transparent; color:#cbd5e1; border:none; padding:8px 14px; border-radius:8px; cursor:pointer;`;
+        actions.appendChild(cancelBtn);
+    }
     actions.appendChild(okBtn);
 
     box.appendChild(title);
@@ -74,33 +111,51 @@ function showConfirm(message, onConfirm) {
         if (el) el.remove();
     }
 
-    cancelBtn.addEventListener('click', cleanup);
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
-    okBtn.addEventListener('click', function() { cleanup(); if (typeof onConfirm === 'function') onConfirm(); });
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            cleanup();
+            if (typeof options.onCancel === 'function') options.onCancel();
+        });
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                cleanup();
+                if (typeof options.onCancel === 'function') options.onCancel();
+            }
+        });
+    } else {
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
+    }
+
+    okBtn.addEventListener('click', function() {
+        cleanup();
+        if (typeof options.onOk === 'function') options.onOk();
+    });
+}
+
+function showConfirm(message, onConfirm) {
+    showDialog({
+        title: 'Are you sure',
+        message: message,
+        showCancel: true,
+        okText: 'OK',
+        cancelText: 'Cancel',
+        onOk: onConfirm
+    });
+}
+
+function showAlert(message, onOk) {
+    showDialog({
+        title: 'Notice',
+        message: message,
+        showCancel: false,
+        okText: 'OK',
+        onOk: onOk
+    });
 }
 
 // Get logged in user information
 function getLoggedInUser() {
-    const username = localStorage.getItem("loggedInUser");
-    const role = localStorage.getItem("role");
-
-    if (role === "admin") {
-        return {
-            username: "admin",
-            fullname: "Administrator",
-            role: "admin"
-        };
-    }
-
-    if (username && (role === "resident" || role === "barangay_staff")) {
-        return getUserByUsername(username) || {
-            username: username,
-            fullname: "User",
-            role: role
-        };
-    }
-
-    return null;
+    return fetchSessionUserSync();
 }
 
 // Format date for display

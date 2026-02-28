@@ -13,80 +13,78 @@ function login() {
         return;
     }
 
-    // Check admin account
-    if (username === "admin" && password === "admin123") {
-        localStorage.setItem("role", "admin");
-        localStorage.setItem("loggedInUser", "admin");
-        localStorage.setItem("loginTime", new Date().toISOString());
-        if (typeof showToast === 'function') showToast(`Welcome, Administrator`, 'success');
-        setTimeout(() => { window.location.href = "admin-dashboard.html"; }, 800);
-        return;
-    }
-
-    // Use AuthService if available (will use Firebase when configured), otherwise fall back to local DB
+    // Use AuthService (API/Firebase)
     if (window.AuthService && typeof AuthService.login === 'function') {
         AuthService.login(username, password)
             .then(function(user) {
-                // `user` may be a local user object or a Firebase user
-                const isFirebaseUser = user && user.uid;
-                const savedUsername = !isFirebaseUser ? (user.username || username) : (user.email || username);
-                const role = !isFirebaseUser ? (user.role || 'resident') : (localStorage.getItem('role') || 'resident');
-
-                localStorage.setItem("role", role);
-                localStorage.setItem("loggedInUser", savedUsername);
-                localStorage.setItem("loginTime", new Date().toISOString());
+                const role = user.role || 'resident';
+                const savedUsername = user.username || username;
                 if (typeof showToast === 'function') showToast(`Welcome, ${user.fullname || savedUsername}`, 'success');
 
                 const redirectUrl = role === "barangay_staff" ? "barangay-staff-dashboard.html" : (role === 'admin' ? 'admin-dashboard.html' : 'resident-dashboard.html');
-
-                // if the login was handled by Firebase, grab and store the ID token
-                if (isFirebaseUser && firebase && firebase.auth().currentUser) {
-                    firebase.auth().currentUser.getIdToken()
-                        .then(function(token) {
-                            // save token for later API requests
-                            localStorage.setItem('idToken', token);
-                            setTimeout(() => { window.location.href = redirectUrl; }, 800);
-                        })
-                        .catch(function(e) {
-                            console.warn('Failed to get ID token', e);
-                            setTimeout(() => { window.location.href = redirectUrl; }, 800);
-                        });
-                } else {
-                    setTimeout(() => { window.location.href = redirectUrl; }, 800);
-                }
+                setTimeout(() => { window.location.href = redirectUrl; }, 800);
             })
-            .catch(function(err) {
+            .catch(async function(err) {
+                if (err && err.code === 'PASSWORD_CHANGE_REQUIRED') {
+                    await forcePasswordChangeFlow(username, password);
+                    return;
+                }
                 showMessage(err && err.message ? err.message : "Invalid Username or Password", "error");
             });
         return;
     }
+    showMessage("Login service unavailable", "error");
+}
 
-    // Fallback: Check user accounts (residents and staff) using local DB
-    // Uses async verifyPassword() to correctly handle PBKDF2-hashed passwords
-    const user = getUserByUsername(username);
-    if (!user) {
-        showMessage("Invalid Username or Password", "error");
+function validateNewPassword(newPassword, username) {
+    if (window.passwordPolicy && typeof window.passwordPolicy.validatePassword === "function") {
+        return window.passwordPolicy.validatePassword(newPassword, username, "");
+    }
+    if (String(newPassword || "").length < 8) {
+        return { ok: false, error: "Password must be at least 8 characters long." };
+    }
+    return { ok: true };
+}
+
+async function forcePasswordChangeFlow(username, currentPassword) {
+    if (!window.api || typeof window.api.changePasswordRequired !== "function") {
+        showMessage("Password must be changed, but API endpoint is unavailable.", "error");
         return;
     }
 
-    verifyPassword(password, user.password).then(function(valid) {
-        if (valid) {
-            localStorage.setItem("role", user.role);
-            localStorage.setItem("loggedInUser", username);
-            localStorage.setItem("loginTime", new Date().toISOString());
-            if (typeof showToast === 'function') showToast(`Welcome, ${user.fullname || username}`, 'success');
+    const firstPrompt = window.prompt(
+        "Password change required.\nEnter a new password (8+ chars, at least 1 uppercase and 1 symbol, no spaces):"
+    );
+    if (!firstPrompt) {
+        showMessage("Password change is required before login.", "error");
+        return;
+    }
 
-            // Redirect based on role
-            const redirectUrl = user.role === "barangay_staff"
-                ? "barangay-staff-dashboard.html"
-                : "resident-dashboard.html";
-            setTimeout(() => { window.location.href = redirectUrl; }, 800);
-        } else {
-            showMessage("Invalid Username or Password", "error");
-        }
-    }).catch(function() {
-        showMessage("Invalid Username or Password", "error");
-    });
+    const validation = validateNewPassword(firstPrompt, username);
+    if (!validation.ok) {
+        showMessage(validation.error, "error");
+        return;
+    }
+
+    const confirmPrompt = window.prompt("Confirm your new password:");
+    if (!confirmPrompt) {
+        showMessage("Password change canceled.", "error");
+        return;
+    }
+    if (firstPrompt !== confirmPrompt) {
+        showMessage("Passwords do not match.", "error");
+        return;
+    }
+
+    try {
+        const user = await window.api.changePasswordRequired(username, currentPassword, firstPrompt);
+        const role = user.role || 'resident';
+        if (typeof showToast === 'function') showToast('Password updated successfully.', 'success');
+        const redirectUrl = role === "barangay_staff" ? "barangay-staff-dashboard.html" : (role === 'admin' ? 'admin-dashboard.html' : 'resident-dashboard.html');
+        setTimeout(() => { window.location.href = redirectUrl; }, 900);
+    } catch (error) {
+        showMessage(error && error.message ? error.message : "Failed to change password", "error");
+    }
 }
 
 function showMessage(message, type) {

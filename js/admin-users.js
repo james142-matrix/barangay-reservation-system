@@ -1,14 +1,16 @@
 // Initialize admin users page
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('admin');
-    loadUsers();
+    loadUsers().catch(err => {
+        showToast('Failed to load users: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
 let editingUserId = null;
 let allUsers = [];
 
-function loadUsers() {
-    allUsers = getAllUsers();
+async function loadUsers() {
+    allUsers = await window.api.getUsers();
     updateStats();
     displayUsers(allUsers);
 }
@@ -103,7 +105,7 @@ function openAddUserModal() {
     editingUserId = null;
     document.getElementById('modalTitle').textContent = 'Add New User';
     document.getElementById('userForm').reset();
-    document.getElementById('password').placeholder = '';
+    document.getElementById('password').placeholder = '8+ chars, 1 uppercase, 1 symbol, no spaces';
     document.getElementById('password').required = true;
     document.getElementById('userModal').style.display = 'flex';
 }
@@ -115,7 +117,7 @@ function closeUserModal() {
 }
 
 function editUser(id) {
-    const user = getUserById(id);
+    const user = allUsers.find(u => String(u.id) === String(id));
     if (!user) return;
 
     editingUserId = id;
@@ -133,7 +135,7 @@ function editUser(id) {
     document.getElementById('userModal').style.display = 'flex';
 }
 
-function saveUser(event) {
+async function saveUser(event) {
     event.preventDefault();
 
     const userData = {
@@ -146,26 +148,59 @@ function saveUser(event) {
         role: document.getElementById('role').value
     };
 
-    if (editingUserId) {
-        // Update existing user
-        updateUser(editingUserId, userData);
-        if (typeof showToast === 'function') showToast('User updated successfully!', 'success');
-    } else {
-        // Create new user
-        createUser(userData);
-        if (typeof showToast === 'function') showToast('User created successfully!', 'success');
+    if (userData.password) {
+        if (window.passwordPolicy && typeof window.passwordPolicy.validatePassword === 'function') {
+            const policy = window.passwordPolicy.validatePassword(userData.password, userData.username, userData.email);
+            if (!policy.ok) {
+                showToast(policy.error, 'danger');
+                return;
+            }
+        } else if (userData.password.length < 8) {
+            showToast('Password must be at least 8 characters long.', 'danger');
+            return;
+        }
+    }
+
+    try {
+        if (editingUserId) {
+            const payload = { ...userData };
+            if (!payload.password) {
+                delete payload.password;
+            }
+            await window.api.updateUser(editingUserId, payload);
+            if (typeof showToast === 'function') showToast('User updated successfully!', 'success');
+        } else {
+            const payload = { ...userData, password: userData.password };
+            await window.api.signup(payload);
+            if (typeof showToast === 'function') showToast('User created successfully!', 'success');
+        }
+    } catch (error) {
+        showToast('Failed to save user: ' + (error.message || 'Unknown error'), 'danger');
+        return;
     }
 
     closeUserModal();
     loadUsers();
 }
 
-function deleteUserConfirm(id) {
-    if (confirm('Are you sure you want to archive this user? They will be removed from the list but kept in storage.')) {
-        // archiveUser is invoked by deleteUser underneath
-        deleteUser(id);
-        if (typeof showToast === 'function') showToast('User archived successfully!', 'success');
-        loadUsers();
+async function deleteUserConfirm(id) {
+    const removeUser = async () => {
+        try {
+            await window.api.deleteUser(id);
+            if (typeof showToast === 'function') showToast('User removed successfully!', 'success');
+            loadUsers();
+        } catch (error) {
+            showToast('Failed to remove user: ' + (error.message || 'Unknown error'), 'danger');
+        }
+    };
+
+    if (typeof showConfirm === 'function') {
+        showConfirm('Are you sure you want to remove this user?', removeUser);
+        return;
+    }
+
+    if (confirm('Are you sure you want to remove this user?')) {
+        await removeUser();
     }
 }
 

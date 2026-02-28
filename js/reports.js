@@ -1,13 +1,30 @@
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth('admin');
-    updateReports();
+    updateReports().catch(err => {
+        showToast('Failed to load reports: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
+function toNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
 // Update all reports
-function updateReports() {
+async function updateReports() {
     const dateRange = document.getElementById('dateRange').value;
-    let reservations = getAllReservations();
+    const [allReservations, facilities, users] = await Promise.all([
+        window.api.getAllReservations(),
+        window.api.getFacilities(),
+        window.api.getUsers()
+    ]);
+    const facilityMap = new Map((facilities || []).map(f => [String(f.id), f]));
+    const userMap = new Map((users || []).map(u => [u.username, u]));
+    let reservations = (allReservations || []).map(r => ({
+        ...r,
+        createdAt: r.createdAt || r.created_at || null
+    }));
     
     // Filter by date range
     if (dateRange !== 'all-time') {
@@ -37,16 +54,16 @@ function updateReports() {
     let revenue = 0;
     reservations.forEach(r => {
         if (r.paymentStatus === 'paid' || r.paymentStatus === 'cash') {
-            revenue += r.totalCost || 0;
+            revenue += toNumber(r.totalCost);
         }
     });
     document.getElementById('revenue-total').textContent = `₱${revenue.toFixed(2)}`;
     
     // Show facility usage
-    showFacilityUsage(reservations);
+    showFacilityUsage(reservations, facilities);
     
     // Show top residents
-    showTopResidents(reservations);
+    showTopResidents(reservations, userMap);
     
     // Show status breakdown
     showStatusBreakdown(stats);
@@ -55,7 +72,7 @@ function updateReports() {
     showMonthlyTrend(reservations);
     
     // Show detailed table
-    showDetailedTable(reservations);
+    showDetailedTable(reservations, facilityMap, userMap);
 }
 
 // Calculate statistics
@@ -70,8 +87,7 @@ function calculateStats(reservations) {
 }
 
 // Show facility usage report
-function showFacilityUsage(reservations) {
-    const facilities = getAllFacilities();
+function showFacilityUsage(reservations, facilities) {
     let html = '<table class="table"><thead><tr><th>Facility</th><th>Total</th><th>Approved</th><th>Pending</th><th>Rejected</th></tr></thead><tbody>';
     
     facilities.forEach(facility => {
@@ -94,7 +110,7 @@ function showFacilityUsage(reservations) {
 }
 
 // Show top residents
-function showTopResidents(reservations) {
+function showTopResidents(reservations, userMap) {
     const residentCount = {};
     
     reservations.forEach(r => {
@@ -113,7 +129,7 @@ function showTopResidents(reservations) {
     let html = '<table class="table"><thead><tr><th>Resident</th><th>Reservations</th></tr></thead><tbody>';
     
     sorted.forEach((item, idx) => {
-        const resident = getUserByUsername(item[0]);
+        const resident = userMap.get(item[0]);
         const residentName = resident ? resident.fullname : item[0];
         html += `<tr>
             <td><strong>${idx + 1}. ${residentName}</strong></td>
@@ -183,28 +199,44 @@ function showMonthlyTrend(reservations) {
 }
 
 // Show detailed reservations table
-function showDetailedTable(reservations) {
+function showDetailedTable(reservations, facilityMap, userMap) {
     if (reservations.length === 0) {
-        document.getElementById('detailed-table').innerHTML = '<p style="color: #999; text-align: center;">No reservations found</p>';
+        document.getElementById('detailed-table').innerHTML = '<p style="color: #999; text-align: center;">No transaction records found</p>';
         return;
     }
     
-    let html = '<table class="table"><thead><tr><th>Resident</th><th>Facility</th><th>Date</th><th>Time</th><th>Status</th><th>Submitted</th></tr></thead><tbody>';
+    let html = '<table class="table"><thead><tr><th>Resident</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Reservation</th><th>Payment</th><th>Method</th><th>Paid At</th><th>Submitted</th></tr></thead><tbody>';
     
     reservations.slice(0, 20).forEach(r => {
-        const resident = getUserByUsername(r.username);
-        const facility = getFacilityById(r.facilityId);
+        const resident = userMap.get(r.username);
+        const facility = facilityMap.get(String(r.facilityId));
         const residentName = resident ? resident.fullname : r.username;
         const facilityName = facility ? facility.name : 'Unknown';
-        const statusClass = r.status === 'pending' ? 'pending' : (r.status === 'approved' ? 'approved' : 'rejected');
-        const submitted = formatDate(r.createdAt).split(' ')[0];
+        const statusClass = r.status === 'pending' ? 'pending' : ((r.status === 'approved' || r.status === 'completed') ? 'approved' : 'rejected');
+        const submitted = r.createdAt ? formatDate(r.createdAt).split(' ')[0] : '—';
+        const eventStart = r.eventStartDate || r.eventDate;
+        const eventEnd = r.eventEndDate;
+        const eventDateText = eventStart
+            ? `${formatDate(eventStart).split(' ')[0]}${eventEnd && eventEnd !== eventStart ? ' → ' + formatDate(eventEnd).split(' ')[0] : ''}`
+            : '—';
+        const amountText = `₱${toNumber(r.totalCost).toFixed(2)}`;
+        const paymentStatus = r.paymentStatus === 'paid' ? 'ONLINE PAID' : (r.paymentStatus === 'cash' ? 'CASH PAID' : 'UNPAID');
+        const paymentClass = r.paymentStatus === 'paid' || r.paymentStatus === 'cash' ? 'approved' : 'pending';
+        const paymentMethod = r.paymentMethod ? String(r.paymentMethod).toUpperCase() : '—';
+        const paidAt = r.paymentDate ? formatDate(r.paymentDate).split(' ')[0] : '—';
+        const reservationStatus = (r.status || 'pending').toUpperCase();
+        const timeRange = (r.startTime && r.endTime) ? `${r.startTime} - ${r.endTime}` : '—';
         
         html += `<tr>
             <td><strong>${residentName}</strong></td>
             <td>${facilityName}</td>
-            <td>${formatDate(r.eventStartDate || r.eventDate).split(' ')[0]}${r.eventEndDate && r.eventEndDate !== (r.eventStartDate || r.eventDate) ? ' → ' + formatDate(r.eventEndDate).split(' ')[0] : ''}</td>
-            <td>${r.startTime} - ${r.endTime}</td>
-            <td><span class="badge ${statusClass}">${r.status.toUpperCase()}</span></td>
+            <td>${eventDateText}</td>
+            <td>${timeRange}</td>
+            <td><strong style="color:#667eea;">${amountText}</strong></td>
+            <td><span class="badge ${statusClass}">${reservationStatus}</span></td>
+            <td><span class="badge ${paymentClass}">${paymentStatus}</span></td>
+            <td>${paymentMethod}</td>
+            <td>${paidAt}</td>
             <td>${submitted}</td>
         </tr>`;
     });
@@ -212,7 +244,7 @@ function showDetailedTable(reservations) {
     html += '</tbody></table>';
     
     if (reservations.length > 20) {
-        html += `<p style="text-align: center; color: #999; margin-top: 10px;">Showing 20 of ${reservations.length} reservations</p>`;
+        html += `<p style="text-align: center; color: #999; margin-top: 10px;">Showing 20 of ${reservations.length} transactions</p>`;
     }
     
     document.getElementById('detailed-table').innerHTML = html;

@@ -1,17 +1,36 @@
 // Initialize barangay staff facilities page
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth('barangay_staff');
-    loadFacilities();
-    loadTodayReservations();
+    loadData().catch(err => {
+        showToast('Failed to load facilities: ' + (err.message || 'Unknown error'), 'danger');
+    });
 });
 
 let selectedFacility = null;
+let facilitiesCache = [];
+let reservationsCache = [];
+let usersByUsername = new Map();
+
+async function loadData() {
+    const [facilities, reservations, users] = await Promise.all([
+        window.api.getFacilities(),
+        window.api.getAllReservations(),
+        window.api.getUsers()
+    ]);
+    facilitiesCache = facilities || [];
+    reservationsCache = (reservations || []).map(r => ({
+        ...r,
+        createdAt: r.createdAt || r.created_at || null
+    }));
+    usersByUsername = new Map((users || []).map(u => [u.username, u]));
+    loadFacilities();
+    loadTodayReservations();
+}
 
 function loadFacilities() {
-    const facilities = getAllFacilities();
     const container = document.getElementById('facilities-grid');
     
-    if (facilities.length === 0) {
+    if (facilitiesCache.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="grid-column: 1/-1;">
                 <div class="empty-state-icon">🏢</div>
@@ -23,7 +42,7 @@ function loadFacilities() {
     }
     
     container.innerHTML = '';
-    facilities.forEach(facility => {
+    facilitiesCache.forEach(facility => {
         const card = createFacilityCard(facility);
         container.appendChild(card);
     });
@@ -34,8 +53,7 @@ function createFacilityCard(facility) {
     card.className = 'facility-card';
     
     // Count reservations for this facility
-    const allReservations = getAllReservations();
-    const facilityReservations = allReservations.filter(r => r.facilityId === facility.id);
+    const facilityReservations = reservationsCache.filter(r => String(r.facilityId) === String(facility.id));
     const approvedCount = facilityReservations.filter(r => r.status === 'approved').length;
     const pendingCount = facilityReservations.filter(r => r.status === 'pending').length;
     
@@ -64,7 +82,7 @@ function createFacilityCard(facility) {
 function showFacilityModal(event, facilityId) {
     if (event) event.stopPropagation();
     
-    const facility = getFacilityById(facilityId);
+    const facility = facilitiesCache.find(f => String(f.id) === String(facilityId));
     if (!facility) return;
     
     selectedFacility = facility;
@@ -72,9 +90,8 @@ function showFacilityModal(event, facilityId) {
     document.getElementById('modalTitle').textContent = facility.name;
     
     // Get reservations for this facility
-    const allReservations = getAllReservations();
-    const facilityReservations = allReservations
-        .filter(r => r.facilityId === facility.id)
+    const facilityReservations = reservationsCache
+        .filter(r => String(r.facilityId) === String(facility.id))
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 10); // Show last 10 reservations
     
@@ -86,7 +103,7 @@ function showFacilityModal(event, facilityId) {
         reservationsList += '<table style="width: 100%; font-size: 13px;"><thead><tr><th>Date</th><th>Time</th><th>Resident</th><th>Status</th></tr></thead><tbody>';
         
         facilityReservations.forEach(r => {
-            const resident = getUserByUsername(r.username);
+            const resident = usersByUsername.get(r.username);
             const residentName = resident ? resident.fullname : r.username;
             const eventDate = formatDate(r.eventStartDate || r.eventDate).split(',')[0] +
                 (r.eventEndDate && r.eventEndDate !== (r.eventStartDate || r.eventDate) ? ' → ' + formatDate(r.eventEndDate).split(',')[0] : '');
@@ -130,11 +147,10 @@ function closeFacilityModal() {
 }
 
 function loadTodayReservations() {
-    const allReservations = getAllReservations();
     const today = new Date().toISOString().split('T')[0];
     
     // Filter reservations for today
-    const todayReservations = allReservations.filter(r => {
+    const todayReservations = reservationsCache.filter(r => {
         const start = new Date((r.eventStartDate || r.eventDate) + 'T' + r.startTime);
         const endDate = r.eventEndDate || r.eventDate;
         const end = new Date(endDate + 'T' + r.endTime);
@@ -157,8 +173,8 @@ function loadTodayReservations() {
     let html = '<table class="table"><thead><tr><th>Facility</th><th>Resident</th><th>Time</th><th>Status</th><th>Guests</th></tr></thead><tbody>';
     
     todayReservations.forEach(r => {
-        const facility = getFacilityById(r.facilityId);
-        const resident = getUserByUsername(r.username);
+        const facility = facilitiesCache.find(f => String(f.id) === String(r.facilityId));
+        const resident = usersByUsername.get(r.username);
         const statusClass = r.status === 'pending' ? 'pending' : (r.status === 'approved' ? 'approved' : 'rejected');
         
         html += `<tr>
