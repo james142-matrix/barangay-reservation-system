@@ -21,3 +21,4 @@
         requirementsText: "Use 8+ chars, with at least one uppercase letter, one symbol, and no spaces."
     };
 })();
+

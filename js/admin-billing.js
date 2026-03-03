@@ -7,9 +7,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const user = getLoggedInUser();
     const role = user ? user.role : null;
     if (role === 'admin') {
-        checkAuth('admin');
+        if (!checkAuth('admin')) return;
     } else {
-        checkAuth('barangay_staff');
+        if (!checkAuth('barangay_staff')) return;
     }
 
     loadAllBillingReservations().catch(err => {
@@ -130,7 +130,7 @@ function renderBillingTable(rows) {
                 <td>${escHtml(r.facilityName)}</td>
                 <td>${eventDate}</td>
                 <td style="white-space:nowrap;">${timeRange}</td>
-                <td style="font-weight:700; color:#667eea;">${amount}</td>
+                <td style="font-weight:700; color:#e83e8c;">${amount}</td>
                 <td>${resvBadge}</td>
                 <td>${payBadge}</td>
                 <td>
@@ -215,7 +215,7 @@ function adminConfirmCash(reservationId) {
         try {
             const reservation = await window.api.updateReservation(reservationId, {
                 paymentStatus: 'cash',
-                paymentMethod: 'cash',
+                paymentMethod: 'onsite_cash',
                 paymentDate: new Date().toISOString(),
                 status: 'completed'
             });
@@ -273,7 +273,7 @@ function viewBillingDetail(reservationId) {
             </div>
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">AMOUNT</p>
-                <p style="font-weight:700; font-size:20px; color:#667eea;">₱${toAmount(r.totalCost).toFixed(2)}</p>
+                <p style="font-weight:700; font-size:20px; color:#e83e8c;">₱${toAmount(r.totalCost).toFixed(2)}</p>
             </div>
             <div>
                 <p style="font-size:12px; color:#888; margin-bottom:4px;">PAYMENT METHOD</p>
@@ -463,3 +463,6 @@ function escHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, "&quot;");
 }
+
+
+

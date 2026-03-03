@@ -1,17 +1,3 @@
-async function ensureFirebaseUserForSignup(email, password) {
-    if (!window.firebaseAuth || typeof window.firebaseAuth.fetchSignInMethodsForEmail !== "function") {
-        throw new Error("Firebase Auth is not initialized on signup page");
-    }
-
-    const methods = await window.firebaseAuth.fetchSignInMethodsForEmail(email);
-    if (Array.isArray(methods) && methods.length > 0) {
-        return { created: false, user: null };
-    }
-
-    const credential = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
-    return { created: true, user: credential.user || null };
-}
-
 async function signup() {
     const fullname = document.getElementById("fullname").value.trim();
     const email = document.getElementById("email").value.trim();
@@ -61,10 +47,7 @@ async function signup() {
         return;
     }
 
-    let firebaseSync = { created: false, user: null };
     try {
-        firebaseSync = await ensureFirebaseUserForSignup(email, password);
-
         const userData = {
             fullname: fullname,
             email: email,
@@ -77,40 +60,17 @@ async function signup() {
 
         await window.api.signup(userData);
 
-        if (firebaseSync.created && window.firebaseAuth && typeof window.firebaseAuth.signOut === "function") {
-            await window.firebaseAuth.signOut();
-        }
-
         if (typeof showToast === 'function') {
             showToast(`Account created for ${username}`, 'success');
             setTimeout(() => {
-                window.location.href = "index.html";
+                window.location.href = "index.php";
             }, 1000);
         } else {
             showMessage("Account created successfully! Redirecting to login...", "success");
-            setTimeout(() => { window.location.href = "index.html"; }, 1200);
+            setTimeout(() => { window.location.href = "index.php"; }, 1200);
         }
     } catch (error) {
-        if (firebaseSync.created && firebaseSync.user) {
-            try {
-                await firebaseSync.user.delete();
-            } catch (_) {
-                // ignore cleanup errors
-            }
-            try {
-                if (window.firebaseAuth && typeof window.firebaseAuth.signOut === "function") {
-                    await window.firebaseAuth.signOut();
-                }
-            } catch (_) {
-                // ignore cleanup errors
-            }
-        }
-
         const msg = (error && error.message ? error.message : '').toLowerCase();
-        if (msg.includes('firebase') || msg.includes('auth/')) {
-            showMessage("Cannot create account right now: Firebase signup is not ready. Check Firebase Email/Password + Authorized Domains.", "error");
-            return;
-        }
         if (msg.includes('username already exists')) {
             showMessage("Username already taken, please choose another", "error");
             return;
@@ -176,4 +136,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 });
+
 

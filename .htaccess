@@ -1,0 +1,12 @@
+RewriteEngine On
+
+# Always serve PHP pages even if old .html URLs are used
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.+)\.html$ /barangay-reservation-system/$1.php [R=302,L]
+
+# Prevent stale cached scripts/pages during migration
+<IfModule mod_headers.c>
+  Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+  Header set Pragma "no-cache"
+  Header set Expires "0"
+</IfModule>

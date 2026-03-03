@@ -2,7 +2,7 @@
 // No localStorage data fallback: all business data must come from MySQL via API.
 
 (function() {
-    const BASE_URL = window.API_BASE_URL || 'http://localhost:3000';
+    const BASE_URL = window.API_BASE_URL || '/barangay-reservation-system/api';
 
     async function request(path, options) {
         options = options || {};
@@ -122,14 +122,6 @@
         });
     }
 
-    async function verifyGoogleToken(idToken) {
-        return request('/auth/google', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken })
-        });
-    }
-
     // POST /users — register a new user; sends the already-hashed password
     async function signup(userData) {
         return request('/users', {
@@ -191,14 +183,6 @@
         });
     }
 
-    async function resetPasswordWithFirebaseCode(oobCode, newPassword) {
-        return request('/users/forgot-password/firebase-reset', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ oobCode, newPassword })
-        });
-    }
-
     // expose
     window.api = {
         request,
@@ -214,7 +198,6 @@
         getNotificationsByUser,
         createNotification,
         markNotificationAsRead,
-        verifyGoogleToken,
         signup,
         getUsers,
         updateUser,
@@ -225,7 +208,8 @@
         logout,
         checkForgotPasswordEmail,
         requestPasswordResetCode,
-        resetPasswordWithCode,
-        resetPasswordWithFirebaseCode
+        resetPasswordWithCode
     };
 })();
+
+

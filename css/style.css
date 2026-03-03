@@ -12,6 +12,7 @@ body {
     background: #f5f7fa;
     color: #333;
     line-height: 1.6;
+    overflow-x: hidden;
 }
 
 /* ===========================
@@ -22,7 +23,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e83e8c 0%, #c2185b 100%);
     padding: 20px;
 }
 
@@ -49,7 +50,7 @@ body {
 
 .auth-box h2 {
     font-size: 28px;
-    color: #667eea;
+    color: #e83e8c;
     margin-bottom: 8px;
     font-weight: 600;
 }
@@ -105,7 +106,7 @@ body {
 }
 
 .input-with-icon .eye-toggle:hover {
-    background: rgba(102,126,234,0.06);
+    background: rgba(232,62,140,0.06);
     color: #333;
 }
 
@@ -136,9 +137,9 @@ body {
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #e83e8c;
     background: white;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 0 0 3px rgba(232, 62, 140, 0.1);
 }
 
 .auth-box button {
@@ -146,7 +147,7 @@ body {
     padding: 12px;
     border: none;
     border-radius: 8px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e83e8c 0%, #c2185b 100%);
     color: white;
     font-size: 15px;
     font-weight: 600;
@@ -157,7 +158,7 @@ body {
 
 .auth-box button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 10px 25px rgba(232, 62, 140, 0.4);
 }
 
 .auth-box button:active {
@@ -179,19 +180,19 @@ body {
 }
 
 .auth-box .link-text a {
-    color: #667eea;
+    color: #e83e8c;
     text-decoration: none;
     font-weight: 600;
     transition: color 0.3s;
 }
 
 .auth-box .link-text a:hover {
-    color: #764ba2;
+    color: #c2185b;
 }
 
 .demo-info {
     background: #f0f4ff;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #e83e8c;
     padding: 12px 15px;
     border-radius: 5px;
     font-size: 12px;
@@ -235,7 +236,7 @@ body {
 .navbar-brand {
     font-size: 22px;
     font-weight: 700;
-    color: #667eea;
+    color: #e83e8c;
     text-decoration: none;
 }
 
@@ -261,7 +262,7 @@ body {
 
 .nav-links a:hover,
 .nav-links a.active {
-    color: #667eea;
+    color: #e83e8c;
 }
 
 .nav-links .logout-btn {
@@ -310,8 +311,8 @@ body {
 .sidebar-menu a:hover,
 .sidebar-menu a.active {
     background: #f5f7fa;
-    color: #667eea;
-    border-left-color: #667eea;
+    color: #e83e8c;
+    border-left-color: #e83e8c;
 }
 
 .main-content {
@@ -319,6 +320,38 @@ body {
     margin-top: 70px;
     padding: 30px;
     min-height: calc(100vh - 70px);
+}
+
+/* Reservation page desktop layout */
+.reservation-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 680px) minmax(0, 420px);
+    gap: 12px;
+    max-width: 1120px;
+    margin: 0 auto;
+    align-items: start;
+    justify-content: center;
+}
+
+.reservation-form-card {
+    width: 100%;
+    max-width: none;
+}
+
+.reservation-summary-card {
+    width: 100%;
+    max-width: none;
+    min-height: 380px;
+    height: fit-content;
+    position: sticky;
+    top: 100px;
+}
+
+.reservation-actions {
+    margin-top: 30px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 /* ===========================
@@ -350,7 +383,7 @@ body {
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     transition: all 0.3s;
-    border-top: 4px solid #667eea;
+    border-top: 4px solid #e83e8c;
 }
 
 .stat-card:hover {
@@ -368,7 +401,7 @@ body {
 .stat-card .value {
     font-size: 32px;
     font-weight: 700;
-    color: #667eea;
+    color: #e83e8c;
 }
 
 .stat-card.pending {
@@ -405,13 +438,13 @@ body {
 }
 
 .welcome-card {
-    background: linear-gradient(135deg, rgba(102,126,234,0.07) 0%, rgba(118,75,162,0.04) 100%);
+    background: linear-gradient(135deg, rgba(232,62,140,0.07) 0%, rgba(194,24,91,0.04) 100%);
     border-radius: 12px;
     padding: 20px 22px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 6px 18px rgba(102, 126, 234, 0.06);
+    box-shadow: 0 6px 18px rgba(232, 62, 140, 0.06);
     width: 100%;
 }
 
@@ -490,7 +523,8 @@ body {
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     margin: 0 auto;          /* center content */
     max-width: 1200px;       /* limit width globally */
 }
@@ -613,13 +647,13 @@ tbody tr:last-child td {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e83e8c 0%, #c2185b 100%);
     color: white;
 }
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 8px 20px rgba(232, 62, 140, 0.4);
 }
 
 .btn-secondary {
@@ -660,7 +694,7 @@ tbody tr:last-child td {
 }
 
 .btn:focus-visible {
-    outline: 3px solid rgba(102, 126, 234, 0.35);
+    outline: 3px solid rgba(232, 62, 140, 0.35);
     outline-offset: 2px;
 }
 
@@ -794,7 +828,7 @@ tbody tr:last-child td {
 .facility-image {
     width: 100%;
     height: 180px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e83e8c 0%, #c2185b 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -843,7 +877,7 @@ tbody tr:last-child td {
 .facility-price {
     font-size: 16px;
     font-weight: 700;
-    color: #667eea;
+    color: #e83e8c;
 }
 
 /* ===========================
@@ -877,7 +911,7 @@ tbody tr:last-child td {
 .alert-info {
     background: #d1ecf1;
     color: #0c5460;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #e83e8c;
 }
 
 /* ===========================
@@ -927,7 +961,9 @@ tbody tr:last-child td {
     .main-content {
         margin-left: 0;
         margin-top: 70px;
-        padding: 20px;
+        padding: 16px;
+        width: 100%;
+        max-width: 100%;
     }
 
     .navbar {
@@ -950,6 +986,22 @@ tbody tr:last-child td {
         flex-direction: column;
         align-items: flex-start;
         gap: 15px;
+    }
+
+    .reservation-layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        max-width: 100%;
+    }
+
+    .reservation-summary-card {
+        position: static;
+        top: auto;
+        min-height: 0;
+    }
+
+    .reservation-actions .btn {
+        width: 100%;
     }
 
     table {
@@ -977,7 +1029,7 @@ tbody tr:last-child td {
         border: none;
         font-size: 22px;
         cursor: pointer;
-        color: #667eea;
+        color: #e83e8c;
     }
 
     .nav-links {
@@ -1020,6 +1072,22 @@ tbody tr:last-child td {
         padding: 15px;
     }
 
+    .filter-bar .filter-group {
+        width: 100%;
+    }
+
+    .filter-bar input,
+    .filter-bar select {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .filter-bar .filter-actions {
+        margin-left: 0;
+        width: 100%;
+        justify-content: flex-start;
+    }
+
     .auth-box {
         padding: 30px 20px;
     }
@@ -1030,6 +1098,10 @@ tbody tr:last-child td {
 
     .navbar-brand {
         font-size: 18px;
+        max-width: calc(100% - 56px);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .form-row {
@@ -1091,7 +1163,7 @@ tbody tr:last-child td {
 }
 
 .notification-trigger {
-    background: #2a5298;
+    background: #d63384;
     color: white;
     display: inline-flex;
     align-items: center;
@@ -1099,7 +1171,7 @@ tbody tr:last-child td {
 }
 
 .notification-trigger:hover {
-    background: #224681;
+    background: #b02a6d;
 }
 
 .notification-dot-count {
@@ -1166,7 +1238,7 @@ tbody tr:last-child td {
 
 .notification-item.unread {
     background: #f8f9fa;
-    border-left: 4px solid #2a5298;
+    border-left: 4px solid #d63384;
 }
 
 .notification-item.approved {
@@ -1200,7 +1272,8 @@ tbody tr:last-child td {
     display: inline-block;
     width: 8px;
     height: 8px;
-    background: #2a5298;
+    background: #d63384;
     border-radius: 50%;
     margin-left: 10px;
 }
+

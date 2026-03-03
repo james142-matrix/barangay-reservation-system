@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
   fullname      VARCHAR(255)  NOT NULL,
   phone         VARCHAR(20)   DEFAULT NULL,
   address       TEXT          DEFAULT NULL,
-  role          VARCHAR(50)   NOT NULL DEFAULT 'resident',
+  role          VARCHAR(50)   NOT NULL DEFAULT 'barangay_staff',
   force_password_change TINYINT(1) NOT NULL DEFAULT 0,
   archived      TINYINT(1)    NOT NULL DEFAULT 0,
   created_at    TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS facilities (
   price         DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
   icon          VARCHAR(20)    CHARACTER SET utf8mb4 DEFAULT NULL,
   status        VARCHAR(50)    DEFAULT 'available',
+  archived      TINYINT(1)     NOT NULL DEFAULT 0,
   created_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -63,6 +64,11 @@ CREATE TABLE IF NOT EXISTS reservations (
   event_description TEXT           DEFAULT NULL,
   contact_person    VARCHAR(255)   DEFAULT NULL,
   contact_phone     VARCHAR(50)    DEFAULT NULL,
+  chairs_count      INT            DEFAULT 0,
+  electronics_count INT            DEFAULT 0,
+  medical_room_details VARCHAR(255) DEFAULT NULL,
+  payment_option    VARCHAR(30)    NOT NULL DEFAULT 'full',
+  down_payment_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   total_cost        DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
   status            VARCHAR(50)    NOT NULL DEFAULT 'pending',
   approved_by       VARCHAR(255)   DEFAULT NULL,
@@ -73,6 +79,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   rejection_reason  TEXT           DEFAULT NULL,
   rejected_by       VARCHAR(255)   DEFAULT NULL,
   rejected_at       DATETIME       NULL DEFAULT NULL,
+  archived          TINYINT(1)     NOT NULL DEFAULT 0,
   created_at        TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -115,15 +122,30 @@ CREATE TABLE IF NOT EXISTS notifications (
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- ============================================================
+-- TABLE: password_reset_codes
+-- Stores hashed OTP reset codes sent by email (10-minute expiry)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  email       VARCHAR(255) NOT NULL,
+  code_hash   VARCHAR(255) NOT NULL,
+  expires_at  DATETIME     NOT NULL,
+  used_at     DATETIME     NULL DEFAULT NULL,
+  request_ip  VARCHAR(45)  DEFAULT NULL,
+  created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_prc_email (email),
+  KEY idx_prc_expires (expires_at)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ============================================================
 -- DEFAULT DATA: Admin account
 -- Default demo credentials are kept for local testing.
 -- ============================================================
 INSERT IGNORE INTO users (id, username, password, email, fullname, phone, address, role, force_password_change, archived)
 VALUES
-  (1, 'admin',    'admin123',   'admin@barangay.ph',    'System Administrator', '09000000000', 'Barangay Molugan, Iloilo', 'admin',          0, 0),
-  (2, 'staff1',   'staff123',   'staff1@barangay.ph',   'Maria Santos',         '09223456789', 'Molugan, Iloilo',          'barangay_staff', 0, 0),
-  (3, 'staff2',   'staff123',   'staff2@barangay.ph',   'Pedro Reyes',          '09323456789', 'Molugan, Iloilo',          'barangay_staff', 0, 0),
-  (4, 'resident1','resident123','resident1@barangay.ph','Juan Dela Cruz',        '09123456789', 'Molugan, Iloilo',          'resident',       0, 0);
+  (1, 'admin',    'pbkdf2$120000$fyxvFvdIVF3A5d7CYrRtOQ==$8LrLWHAUYon1P0SKkqnHuEQklWn5AT/Iwb5qxR3f9HM=',   'admin@barangay.ph',    'System Administrator', '09000000000', 'Barangay Molugan, Iloilo', 'admin',          0, 0),
+  (2, 'staff1',   'pbkdf2$120000$kvW4sAUrA0zROSIvPKgtOw==$LCACqxEJcqfJjULdHp1qsrkszWVB0NldUqmLWH0t6Yc=',   'staff1@barangay.ph',   'Maria Santos',         '09223456789', 'Molugan, Iloilo',          'barangay_staff', 0, 0),
+  (3, 'staff2',   'pbkdf2$120000$IZJ9NUIgicTixROG9QgW+w==$HsmRsqAk/y6qQoE3NGi6dZs19k59jS/aaY0J6QYxIpw=',   'staff2@barangay.ph',   'Pedro Reyes',          '09323456789', 'Molugan, Iloilo',          'barangay_staff', 0, 0);
 
 -- ============================================================
 -- DEFAULT DATA: 6 Facilities

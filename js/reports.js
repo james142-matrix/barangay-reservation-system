@@ -1,6 +1,6 @@
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuth('admin');
+    if (!checkAuth('admin')) return;
     updateReports().catch(err => {
         showToast('Failed to load reports: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -133,7 +133,7 @@ function showTopResidents(reservations, userMap) {
         const residentName = resident ? resident.fullname : item[0];
         html += `<tr>
             <td><strong>${idx + 1}. ${residentName}</strong></td>
-            <td><span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 4px;">${item[1]}</span></td>
+            <td><span style="background: #e83e8c; color: white; padding: 4px 8px; border-radius: 4px;">${item[1]}</span></td>
         </tr>`;
     });
     
@@ -190,7 +190,7 @@ function showMonthlyTrend(reservations) {
     Object.entries(monthlyData).forEach(item => {
         html += `<tr>
             <td><strong>${item[0]}</strong></td>
-            <td><strong style="color: #667eea;">${item[1]}</strong></td>
+            <td><strong style="color: #e83e8c;">${item[1]}</strong></td>
         </tr>`;
     });
     
@@ -232,7 +232,7 @@ function showDetailedTable(reservations, facilityMap, userMap) {
             <td>${facilityName}</td>
             <td>${eventDateText}</td>
             <td>${timeRange}</td>
-            <td><strong style="color:#667eea;">${amountText}</strong></td>
+            <td><strong style="color:#e83e8c;">${amountText}</strong></td>
             <td><span class="badge ${statusClass}">${reservationStatus}</span></td>
             <td><span class="badge ${paymentClass}">${paymentStatus}</span></td>
             <td>${paymentMethod}</td>
@@ -249,3 +249,7 @@ function showDetailedTable(reservations, facilityMap, userMap) {
     
     document.getElementById('detailed-table').innerHTML = html;
 }
+
+
+
+

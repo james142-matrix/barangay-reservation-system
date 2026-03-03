@@ -1,7 +1,7 @@
 // Initialize facilities page
 document.addEventListener('DOMContentLoaded', function() {
     // Allow both admins and residents to access facilities page
-    checkAuth();
+    if (!checkAuth()) return;
     bindNotificationToggle();
     loadFacilities().catch(err => {
         const container = document.getElementById('facilities-container');
@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-refresh notifications every 3 seconds
     setInterval(() => {
         const user = getLoggedInUser();
-        if (user && user.role === 'resident') {
+        if (user) {
             updateNotificationBadge(user.username);
         }
     }, 3000);
@@ -98,16 +98,16 @@ function showFacilityModal(facility, e) {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div>
                     <p style="color: #888; font-size: 14px;">Capacity</p>
-                    <p style="font-size: 24px; font-weight: 700; color: #667eea;">${facility.capacity} persons</p>
+                    <p style="font-size: 24px; font-weight: 700; color: #e83e8c;">${facility.capacity} persons</p>
                 </div>
                 <div>
                     <p style="color: #888; font-size: 14px;">Daily Rate</p>
-                    <p style="font-size: 24px; font-weight: 700; color: #667eea;">₱${facility.price}</p>
+                    <p style="font-size: 24px; font-weight: 700; color: #e83e8c;">₱${facility.price}</p>
                 </div>
             </div>
         </div>
         
-        <div style="background: #d1ecf1; border-left: 4px solid #667eea; padding: 15px; border-radius: 5px;">
+        <div style="background: #d1ecf1; border-left: 4px solid #e83e8c; padding: 15px; border-radius: 5px;">
             <p style="color: #0c5460; font-size: 14px;"><strong>ℹ️ Note:</strong> To make a reservation for this facility, click the "Make Reservation" button below and fill out the required details.</p>
         </div>
     `;
@@ -122,7 +122,7 @@ function closeFacilityModal() {
 
 function goToReserve() {
     if (selectedFacility) {
-        window.location.href = `reserve.html?facility=${encodeURIComponent(selectedFacility.id)}`;
+        window.location.href = `reserve.php?facility=${encodeURIComponent(selectedFacility.id)}`;
     }
 }
 
@@ -140,7 +140,7 @@ document.addEventListener('click', function(event) {
 
 function loadNotifications() {
     const user = getLoggedInUser();
-    if (user && user.role === 'resident') {
+    if (user) {
         updateNotificationBadge(user.username);
     }
 }
@@ -161,7 +161,7 @@ function toggleNotifications() {
     const panel = document.getElementById("notificationPanel");
     const user = getLoggedInUser();
     
-    if (!user || user.role !== 'resident') return;
+    if (!user) return;
     
     if (!panel.classList.contains('show')) {
         panel.classList.add('show');
@@ -188,7 +188,7 @@ function displayNotifications(username) {
     
     notifications.forEach(notif => {
         const bgColor = notif.type === 'approved' ? '#d4edda' : notif.type === 'rejected' ? '#f8d7da' : '#e7f3ff';
-        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#2196F3';
+        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#e83e8c';
         const readClass = notif.read ? 'opacity-50' : 'font-weight-bold';
         
         html += `
@@ -202,7 +202,7 @@ function displayNotifications(username) {
                         <p style="margin: 0 0 5px 0; color: #666; font-size: 13px;">${notif.message}</p>
                         <p style="margin: 0; font-size: 12px; color: #999;">${getTimeAgo(notif.createdAt)}</p>
                     </div>
-                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #2a5298; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
+                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #d63384; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
                 </div>
             </div>
         `;
@@ -246,4 +246,6 @@ function bindNotificationToggle() {
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
 }
+
+
 

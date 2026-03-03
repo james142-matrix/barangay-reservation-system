@@ -1,6 +1,6 @@
 // Initialize admin dashboard
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('admin');
+    if (!checkAuth('admin')) return;
     loadDashboard().catch(err => {
         showToast('Failed to load dashboard: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -83,7 +83,7 @@ async function displayPendingRequests(allReservationsInput) {
                 <td>${formatDate(r.eventDate).split(',')[0]}</td>
                 <td>${submittedDate}</td>
                 <td>
-                    <a href="admin-requests.html" class="btn btn-small btn-primary">Review</a>
+                    <a href="admin-requests.php" class="btn btn-small btn-primary">Review</a>
                 </td>
             </tr>
         `;
@@ -96,3 +96,6 @@ async function displayPendingRequests(allReservationsInput) {
     
     container.innerHTML = html;
 }
+
+
+

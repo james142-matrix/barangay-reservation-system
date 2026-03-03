@@ -2,7 +2,7 @@
 // Handles resident billing dashboard where users can pay for approved reservations
 
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('resident');
+    if (!checkAuth()) return;
     bindNotificationToggle();
     loadBillingReservations().catch(err => {
         showToast('Failed to load billing reservations: ' + (err.message || 'Unknown error'), 'danger');
@@ -35,14 +35,17 @@ function normalizeReservation(raw) {
         startTime: raw.startTime || raw.start_time,
         endTime: raw.endTime || raw.end_time,
         totalCost: raw.totalCost != null ? Number(raw.totalCost) : (raw.total_cost != null ? Number(raw.total_cost) : 0),
-        paymentStatus: raw.paymentStatus || raw.payment_status || 'pending'
+        paymentStatus: raw.paymentStatus || raw.payment_status || 'pending',
+        paymentOption: raw.paymentOption || raw.payment_option || 'full'
     };
 }
 
 async function loadBillingReservations() {
     const user = getLoggedInUser();
     const [reservationsRaw, facilities] = await Promise.all([
-        window.api.getReservationsByUser(user.username),
+        user && (user.role === 'barangay_staff' || user.role === 'admin')
+            ? window.api.getAllReservations()
+            : window.api.getReservationsByUser(user.username),
         window.api.getFacilities()
     ]);
     let reservations = reservationsRaw;
@@ -71,7 +74,7 @@ function displayBillingList(reservations) {
                 <div class="empty-state-icon">💳</div>
                 <h3>No Pending Payments</h3>
                 <p>You don't have any approved reservations waiting for payment.</p>
-                <a href="reserve.html" class="btn btn-primary">Make a Reservation</a>
+                <a href="reserve.php" class="btn btn-primary">Make a Reservation</a>
             </div>
         `;
         return;
@@ -85,6 +88,7 @@ function displayBillingList(reservations) {
                     <th>Event Date</th>
                     <th>Time</th>
                     <th>Cost</th>
+                    <th>Payment Type</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -99,9 +103,9 @@ function displayBillingList(reservations) {
                 <td>${formatDate(r.eventDate).split(',')[0]}</td>
                 <td>${r.startTime} - ${r.endTime}</td>
                 <td>₱${r.totalCost.toFixed(2)}</td>
+                <td>${r.paymentOption === 'down_payment' ? 'Down Payment' : 'Full Payment'}</td>
                 <td>
-                    <button class="btn btn-small btn-primary" onclick="payOnline(${r.id})">Pay Online</button>
-                    <button class="btn btn-small btn-secondary" onclick="markPaidCash(${r.id})">Mark as Paid (Cash)</button>
+                    <button class="btn btn-small btn-secondary" onclick="showOnsitePaymentInfo(${r.id})">Onsite Cash Only</button>
                 </td>
             </tr>
         `;
@@ -115,80 +119,12 @@ function displayBillingList(reservations) {
     container.innerHTML = html;
 }
 
-async function payOnline(reservationId) {
-    console.log('billing.payOnline', reservationId);
-    const proceedPayment = async () => {
-        try {
-            const reservation = await window.api.updateReservation(reservationId, {
-                paymentStatus: 'paid',
-                paymentMethod: 'online',
-                paymentDate: new Date().toISOString(),
-                status: 'completed'
-            });
-            console.log('billing.markReservationPaid returned', reservation);
-            if (reservation) {
-                const user = getLoggedInUser();
-                createNotification(user.username, 'Payment Received', `Online payment recorded for reservation ${reservation.id}.`, 'info', reservation.id);
-                showToast('Payment successful', 'success');
-                loadBillingReservations();
-            } else {
-                showToast('Unable to record payment', 'danger');
-                if (typeof showAlert === 'function') {
-                    showAlert('Payment failed - reservation not found.');
-                } else {
-                    alert('Payment failed - reservation not found.');
-                }
-            }
-        } catch (error) {
-            showToast('Payment failed: ' + (error.message || 'Unknown error'), 'danger');
-        }
-    };
-
-    if (typeof showConfirm === 'function') {
-        showConfirm('Proceed with online payment?', proceedPayment);
+function showOnsitePaymentInfo(reservationId) {
+    if (typeof showAlert === 'function') {
+        showAlert(`Reservation #${reservationId}: Please proceed to the barangay office for onsite cash payment. Staff/Admin will confirm your payment in the billing module.`);
         return;
     }
-
-    if (!confirm('Proceed with online payment?')) return;
-    await proceedPayment();
-}
-
-async function markPaidCash(reservationId) {
-    console.log('billing.markPaidCash', reservationId);
-    const proceedCash = async () => {
-        try {
-            const reservation = await window.api.updateReservation(reservationId, {
-                paymentStatus: 'cash',
-                paymentMethod: 'cash',
-                paymentDate: new Date().toISOString(),
-                status: 'completed'
-            });
-            console.log('billing.markReservationCash returned', reservation);
-            if (reservation) {
-                const user = getLoggedInUser();
-                createNotification(user.username, 'Payment Recorded', `Cash payment marked for reservation ${reservation.id}.`, 'info', reservation.id);
-                showToast('Payment recorded', 'success');
-                loadBillingReservations();
-            } else {
-                showToast('Unable to record payment', 'danger');
-                if (typeof showAlert === 'function') {
-                    showAlert('Payment failed - reservation not found.');
-                } else {
-                    alert('Payment failed - reservation not found.');
-                }
-            }
-        } catch (error) {
-            showToast('Failed to update payment: ' + (error.message || 'Unknown error'), 'danger');
-        }
-    };
-
-    if (typeof showConfirm === 'function') {
-        showConfirm('Mark this reservation as paid (cash)?', proceedCash);
-        return;
-    }
-
-    if (!confirm('Mark this reservation as paid (cash)?')) return;
-    await proceedCash();
+    alert(`Reservation #${reservationId}: Please proceed to the barangay office for onsite cash payment. Staff/Admin will confirm your payment in the billing module.`);
 }
 
 // ===========================
@@ -241,7 +177,7 @@ function displayNotifications(username) {
     
     notifications.forEach(notif => {
         const bgColor = notif.type === 'approved' ? '#d4edda' : notif.type === 'rejected' ? '#f8d7da' : '#e7f3ff';
-        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#2196F3';
+        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#e83e8c';
         const readClass = notif.read ? 'opacity-50' : 'font-weight-bold';
         
         html += `
@@ -255,7 +191,7 @@ function displayNotifications(username) {
                         <p style="margin: 0 0 5px 0; color: #666; font-size: 13px;">${notif.message}</p>
                         <p style="margin: 0; font-size: 12px; color: #999;">${getTimeAgo(notif.createdAt)}</p>
                     </div>
-                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #2a5298; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
+                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #d63384; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
                 </div>
             </div>
         `;
@@ -299,3 +235,7 @@ function bindNotificationToggle() {
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
 }
+
+
+
+

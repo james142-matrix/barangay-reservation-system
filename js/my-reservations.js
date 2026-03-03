@@ -1,6 +1,6 @@
 // Initialize my reservations page
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('resident');
+    if (!checkAuth()) return;
     bindNotificationToggle();
     loadMyReservations().catch(err => {
         showToast('Failed to load reservations: ' + (err.message || 'Unknown error'), 'danger');
@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', function() {
 let selectedReservation = null;
 let currentReservations = [];
 let facilitiesById = new Map();
+let usersByUsername = new Map();
+
+function formatTime12Hour(timeValue) {
+    if (!timeValue || !timeValue.includes(':')) return '-';
+    const [hourStr, minuteStr] = timeValue.split(':');
+    let hour = parseInt(hourStr, 10);
+    const minute = minuteStr || '00';
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    return `${hour}:${minute} ${suffix}`;
+}
 
 function normalizeReservation(raw) {
     if (!raw) return raw;
@@ -35,17 +47,26 @@ function normalizeReservation(raw) {
         eventDescription: raw.eventDescription || raw.event_description || '',
         contactPerson: raw.contactPerson || raw.contact_person || '',
         contactPhone: raw.contactPhone || raw.contact_phone || '',
+        chairsCount: raw.chairsCount != null ? raw.chairsCount : (raw.chairs_count ?? 0),
+        electronicsCount: raw.electronicsCount != null ? raw.electronicsCount : (raw.electronics_count ?? 0),
+        medicalRoomDetails: raw.medicalRoomDetails || raw.medical_room_details || '',
+        paymentOption: raw.paymentOption || raw.payment_option || 'full',
+        paymentStatus: raw.paymentStatus || raw.payment_status || 'pending',
         createdAt: raw.createdAt || raw.created_at || raw.created || null
     };
 }
 
 async function loadMyReservations() {
     const user = getLoggedInUser();
-    const [reservations, facilities] = await Promise.all([
-        window.api.getReservationsByUser(user.username),
-        window.api.getFacilities()
+    const [reservations, facilities, users] = await Promise.all([
+        user && (user.role === 'barangay_staff' || user.role === 'admin')
+            ? window.api.getAllReservations()
+            : window.api.getReservationsByUser(user.username),
+        window.api.getFacilities(),
+        window.api.getUsers()
     ]);
     facilitiesById = new Map((facilities || []).map(f => [String(f.id), f]));
+    usersByUsername = new Map((users || []).map(u => [u.username, u]));
     console.log('[my-reservations] loaded from MySQL:', reservations.length);
 
     currentReservations = reservations.map(normalizeReservation);
@@ -54,6 +75,8 @@ async function loadMyReservations() {
 
 function displayReservations(reservations) {
     const container = document.getElementById('reservations-list');
+    const viewer = getLoggedInUser();
+    const showClientColumn = !!viewer && (viewer.role === 'barangay_staff' || viewer.role === 'admin');
     
     if (reservations.length === 0) {
         container.innerHTML = `
@@ -61,7 +84,7 @@ function displayReservations(reservations) {
                 <div class="empty-state-icon">📋</div>
                 <h3>No Reservations Yet</h3>
                 <p>You haven't created any reservations yet.</p>
-                <a href="reserve.html" class="btn btn-primary">Create Your First Reservation</a>
+                <a href="reserve.php" class="btn btn-primary">Create Your First Reservation</a>
             </div>
         `;
         return;
@@ -71,6 +94,7 @@ function displayReservations(reservations) {
         <table>
             <thead>
                 <tr>
+                    ${showClientColumn ? '<th>Client</th>' : ''}
                     <th>Facility</th>
                     <th>Event Date</th>
                     <th>Time</th>
@@ -85,6 +109,8 @@ function displayReservations(reservations) {
     
     reservations.forEach(r => {
         const facility = facilitiesById.get(String(r.facilityId));
+        const user = usersByUsername.get(r.username);
+        const clientName = user ? (user.fullname || user.username) : r.username;
         const statusClass = r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending';
         const createdDate = r.createdAt
             ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -92,9 +118,10 @@ function displayReservations(reservations) {
         
         html += `
             <tr>
+                ${showClientColumn ? `<td><strong>${clientName}</strong></td>` : ''}
                 <td>${facility ? facility.name : 'Unknown'}</td>
                 <td>${formatDate(r.eventDate).split(',')[0]}</td>
-                <td>${r.startTime} - ${r.endTime}</td>
+                <td>${formatTime12Hour(r.startTime)} - ${formatTime12Hour(r.endTime)}</td>
                 <td>${r.eventType}</td>
                 <td><span class="status-badge ${statusClass}">${r.status}</span></td>
                 <td>${createdDate}</td>
@@ -117,10 +144,18 @@ function displayReservations(reservations) {
 function filterReservations() {
     const allReservations = currentReservations;
     const status = document.getElementById('statusFilter').value;
+    const payment = document.getElementById('paymentFilter').value;
     
     let filtered = allReservations;
     if (status) {
         filtered = filtered.filter(r => r.status === status);
+    }
+    if (payment === 'unpaid') {
+        filtered = filtered.filter(r => r.paymentStatus !== 'paid');
+    } else if (payment === 'paid') {
+        filtered = filtered.filter(r => r.paymentStatus === 'paid');
+    } else if (payment === 'cash') {
+        filtered = filtered.filter(r => r.paymentStatus === 'cash');
     }
     
     displayReservations(filtered);
@@ -157,7 +192,7 @@ function showReservationDetail(id) {
                 </div>
                 <div>
                     <p style="color: #888; font-size: 13px; text-transform: uppercase; font-weight: 600;">Time</p>
-                    <p style="font-size: 16px; font-weight: 600;">${selectedReservation.startTime} - ${selectedReservation.endTime}</p>
+                    <p style="font-size: 16px; font-weight: 600;">${formatTime12Hour(selectedReservation.startTime)} - ${formatTime12Hour(selectedReservation.endTime)}</p>
                 </div>
             </div>
             
@@ -171,16 +206,34 @@ function showReservationDetail(id) {
                     <p>${selectedReservation.expectedGuests}</p>
                 </div>
             </div>
-            
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div>
+                    <p style="color: #888; font-size: 13px; text-transform: uppercase; font-weight: 600;">Chairs</p>
+                    <p>${selectedReservation.chairsCount || 0}</p>
+                </div>
+                <div>
+                    <p style="color: #888; font-size: 13px; text-transform: uppercase; font-weight: 600;">Electronics</p>
+                    <p>${selectedReservation.electronicsCount || 0}</p>
+                </div>
+            </div>
+
             <div>
                 <p style="color: #888; font-size: 13px; text-transform: uppercase; font-weight: 600;">Description</p>
                 <p>${selectedReservation.eventDescription || 'No description provided'}</p>
             </div>
+
+            ${selectedReservation.medicalRoomDetails ? `
+            <div style="margin-top: 15px;">
+                <p style="color: #888; font-size: 13px; text-transform: uppercase; font-weight: 600;">Medical Room Details</p>
+                <p>${selectedReservation.medicalRoomDetails}</p>
+            </div>` : ''}
             
             <div style="background: #f5f7fa; padding: 15px; border-radius: 8px; margin-top: 20px;">
                 <p style="color: #888; font-size: 13px; margin-bottom: 8px;">Contact Information</p>
                 <p><strong>${selectedReservation.contactPerson}</strong></p>
                 <p>${selectedReservation.contactPhone}</p>
+                <p style="margin-top:8px;"><strong>Payment Option:</strong> ${selectedReservation.paymentOption === 'down_payment' ? 'Down Payment' : 'Full Payment'}</p>
             </div>
             
             ${selectedReservation.rejectionReason ? `
@@ -193,6 +246,8 @@ function showReservationDetail(id) {
     `;
     
     document.getElementById('detailBody').innerHTML = html;
+    const canPay = selectedReservation.status === 'approved' && selectedReservation.paymentStatus !== 'paid';
+    document.getElementById('payBtnModal').style.display = canPay ? 'block' : 'none';
     document.getElementById('cancelBtnModal').style.display = selectedReservation.status === 'pending' ? 'block' : 'none';
     
     document.getElementById('detailModal').classList.add('show');
@@ -299,7 +354,7 @@ function displayNotifications(username) {
     
     notifications.forEach(notif => {
         const bgColor = notif.type === 'approved' ? '#d4edda' : notif.type === 'rejected' ? '#f8d7da' : '#e7f3ff';
-        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#2196F3';
+        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#e83e8c';
         const readClass = notif.read ? 'opacity-50' : 'font-weight-bold';
         
         html += `
@@ -313,7 +368,7 @@ function displayNotifications(username) {
                         <p style="margin: 0 0 5px 0; color: #666; font-size: 13px;">${notif.message}</p>
                         <p style="margin: 0; font-size: 12px; color: #999;">${getTimeAgo(notif.createdAt)}</p>
                     </div>
-                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #2a5298; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
+                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #d63384; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
                 </div>
             </div>
         `;
@@ -357,4 +412,8 @@ function bindNotificationToggle() {
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
 }
+
+
+
+
 

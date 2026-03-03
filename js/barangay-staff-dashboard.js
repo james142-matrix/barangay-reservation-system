@@ -1,6 +1,6 @@
 // Initialize barangay staff dashboard
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('barangay_staff');
+    if (!checkAuth('barangay_staff')) return;
     loadDashboard().catch(err => {
         showToast('Failed to load dashboard: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -22,8 +22,7 @@ async function loadDashboard() {
         total: allReservations.length,
         pending: allReservations.filter(r => r.status === 'pending').length,
         approved: allReservations.filter(r => r.status === 'approved').length,
-        rejected: allReservations.filter(r => r.status === 'rejected').length,
-        completed: allReservations.filter(r => r.status === 'completed').length
+        rejected: allReservations.filter(r => r.status === 'rejected').length
     };
     
     // Update stat cards
@@ -31,7 +30,6 @@ async function loadDashboard() {
     document.getElementById('stat-pending').textContent = stats.pending;
     document.getElementById('stat-approved').textContent = stats.approved;
     document.getElementById('stat-rejected').textContent = stats.rejected;
-    document.getElementById('stat-completed').textContent = stats.completed;
     
     // Display pending requests
     displayPendingRequests(allReservations);
@@ -82,7 +80,7 @@ async function displayPendingRequests(allReservationsInput) {
                 <td>${formatDate(r.eventStartDate || r.eventDate).split(',')[0]}${r.eventEndDate && r.eventEndDate !== (r.eventStartDate || r.eventDate) ? ' → ' + formatDate(r.eventEndDate).split(',')[0] : ''}</td>
                 <td>${submittedDate}</td>
                 <td>
-                    <a href="barangay-staff-requests.html" class="btn btn-small btn-primary">Review</a>
+                    <a href="barangay-staff-requests.php" class="btn btn-small btn-primary">Review</a>
                 </td>
             </tr>
         `;
@@ -95,3 +93,6 @@ async function displayPendingRequests(allReservationsInput) {
     
     container.innerHTML = html;
 }
+
+
+

@@ -586,7 +586,7 @@ function getNotificationsByUser(username) {
     try {
         if (window.api && typeof window.api.getNotificationsByUser === 'function') {
             const xhr = new XMLHttpRequest();
-            const base = window.API_BASE_URL || 'http://localhost:3000';
+            const base = window.API_BASE_URL || '/barangay-reservation-system/api';
             xhr.open('GET', `${base}/notifications?user=${encodeURIComponent(username)}`, false);
             xhr.withCredentials = true;
             xhr.send();
@@ -629,3 +629,6 @@ function getUnreadNotificationsCount(username) {
 
 // Initialize database on load
 initializeDatabase();
+
+
+

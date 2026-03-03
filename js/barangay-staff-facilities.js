@@ -1,6 +1,6 @@
 // Initialize barangay staff facilities page
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('barangay_staff');
+    if (!checkAuth('barangay_staff')) return;
     loadData().catch(err => {
         showToast('Failed to load facilities: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -197,3 +197,6 @@ document.addEventListener('click', function(event) {
         closeFacilityModal();
     }
 });
+
+
+

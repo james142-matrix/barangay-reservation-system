@@ -1,6 +1,6 @@
 // Initialize admin facilities page
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('admin');
+    if (!checkAuth()) return;
     loadFacilitiesList();
 });
 
@@ -60,7 +60,7 @@ async function loadFacilitiesList() {
                 <td><span style="background: ${statusColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; text-transform: capitalize;">${facility.status || 'available'}</span></td>
                 <td>
                     <button class="btn btn-small btn-primary" onclick="editFacility('${facility.id}')">Edit</button>
-                    <button class="btn btn-small btn-danger" onclick="confirmDeleteFacility('${facility.id}')">Delete</button>
+                    <button class="btn btn-small btn-danger" onclick="confirmDeleteFacility('${facility.id}')">Archive</button>
                 </td>
             </tr>
         `;
@@ -137,13 +137,13 @@ async function saveFacility() {
 
 function confirmDeleteFacility(facilityId) {
     if (typeof showConfirm === 'function') {
-        showConfirm('Are you sure you want to delete this facility?', function() {
+        showConfirm('Are you sure you want to archive this facility?', function() {
             doDeleteFacility(facilityId);
         });
         return;
     }
 
-    if (confirm('Are you sure you want to delete this facility?')) {
+    if (confirm('Are you sure you want to archive this facility?')) {
         doDeleteFacility(facilityId);
     }
 }
@@ -151,10 +151,10 @@ function confirmDeleteFacility(facilityId) {
 async function doDeleteFacility(facilityId) {
     try {
         await window.api.deleteFacility(facilityId);
-        if (typeof showToast === 'function') showToast('Facility deleted successfully', 'success');
+        if (typeof showToast === 'function') showToast('Facility archived successfully', 'success');
     } catch (e) {
         console.error('doDeleteFacility error', e);
-        if (typeof showToast === 'function') showToast('Failed to delete facility: ' + e.message, 'danger');
+        if (typeof showToast === 'function') showToast('Failed to archive facility: ' + e.message, 'danger');
     }
     loadFacilitiesList();
 }
@@ -171,3 +171,6 @@ document.addEventListener('click', function(event) {
         closeFacilityModal();
     }
 });
+
+
+

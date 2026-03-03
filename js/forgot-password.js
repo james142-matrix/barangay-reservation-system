@@ -9,21 +9,6 @@ function showMessage(message, type) {
     }, 12000);
 }
 
-let resetOobCode = "";
-
-function extractOobCodeFromLink(value) {
-    if (!value) return "";
-    const raw = String(value).trim();
-    if (!raw) return "";
-
-    try {
-        const url = new URL(raw);
-        return url.searchParams.get("oobCode") || "";
-    } catch (_) {
-        return "";
-    }
-}
-
 async function requestResetCode() {
     const email = document.getElementById("reset-email").value.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,10 +18,6 @@ async function requestResetCode() {
         return;
     }
 
-    if (!window.firebaseAuth || typeof window.firebaseAuth.sendPasswordResetEmail !== "function") {
-        showMessage("Firebase Auth is not initialized on this page", "error");
-        return;
-    }
     if (!window.api || typeof window.api.checkForgotPasswordEmail !== "function") {
         showMessage("API is not initialized on this page", "error");
         return;
@@ -44,28 +25,35 @@ async function requestResetCode() {
 
     try {
         await window.api.checkForgotPasswordEmail(email);
-        await window.firebaseAuth.sendPasswordResetEmail(email);
-        showMessage("Reset link sent to Gmail. Check Inbox/Spam, open the link, then set a new password here.", "success");
+        const result = await window.api.requestPasswordResetCode(email);
+        let msg = "Reset code sent to your Gmail. Check Inbox/Spam, then enter the code below.";
+        if (result && result.code) {
+            msg += ` [Debug code: ${result.code}]`;
+        }
+        showMessage(msg, "success");
     } catch (e) {
         if (e && String(e.message || "").toLowerCase().includes("not registered")) {
             showMessage("Email is not registered in this system.", "error");
             return;
         }
-        if (e && String(e.message || "").includes("auth/user-not-found")) {
-            showMessage("Email is not registered in Firebase Auth.", "error");
-            return;
-        }
         const msg = e && e.message ? e.message : "Unknown error";
-        showMessage("Failed to send reset link: " + msg, "error");
+        showMessage("Failed to send reset code: " + msg, "error");
     }
 }
 
 async function resetPassword() {
+    const email = document.getElementById("reset-email").value.trim();
+    const code = document.getElementById("reset-code").value.trim();
     const newPassword = document.getElementById("new-password").value;
     const confirmPassword = document.getElementById("confirm-new-password").value;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!resetOobCode) {
-        showMessage("Open this page from the reset link in your email first.", "error");
+    if (!emailRegex.test(email)) {
+        showMessage("Please enter a valid email address.", "error");
+        return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+        showMessage("Enter the 6-digit reset code from Gmail.", "error");
         return;
     }
     if (!newPassword || !confirmPassword) {
@@ -87,17 +75,13 @@ async function resetPassword() {
         return;
     }
 
-    if (!window.api || typeof window.api.resetPasswordWithFirebaseCode !== "function") {
+    if (!window.api || typeof window.api.resetPasswordWithCode !== "function") {
         showMessage("API not available", "error");
         return;
     }
 
     try {
-        const result = await window.api.resetPasswordWithFirebaseCode(resetOobCode, newPassword);
-        if (result && result.mysqlUpdated === false) {
-            showMessage("Password changed in Firebase, but no matching email was found in MySQL.", "error");
-            return;
-        }
+        await window.api.resetPasswordWithCode(email, code, newPassword);
         showMessage("Password changed successfully. You can now log in.", "success");
     } catch (e) {
         const msg = e && e.message ? e.message : "Unknown error";
@@ -106,22 +90,7 @@ async function resetPassword() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-    const params = new URLSearchParams(window.location.search);
-    resetOobCode = params.get("oobCode") || "";
-
-    if (!resetOobCode) {
-        const wrappedLink = params.get("link");
-        if (wrappedLink) {
-            const decoded = decodeURIComponent(wrappedLink);
-            resetOobCode = extractOobCodeFromLink(decoded);
-        }
-    }
-
-    if (resetOobCode) {
-        showMessage("Reset link verified. Enter your new password below.", "success");
-    } else {
-        showMessage("Step 1: Send reset link. Step 2: Open that email link here.", "error");
-    }
+    showMessage("Step 1: Send code to your Gmail. Step 2: Enter the code and your new password.", "success");
 
     function eyeSvg(open) {
         if (open) {
@@ -141,3 +110,4 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 });
+

@@ -1,49 +1,32 @@
 # Deployment
 
-## Environments
+## Environment Targets
 
-- Development/demo: offline localStorage mode.
-- Integrated testing: API + MySQL local environment.
-- Production: hosted frontend + secured API + managed DB.
+- Local/dev: XAMPP + MySQL + PHP
+- Production: Apache/Nginx + PHP + MySQL (HTTPS required)
 
-## Local Integrated Deployment
+## Local Deployment (XAMPP)
 
-1. Create/import database using `database.sql`.
-2. Configure server DB credentials and required env vars.
-3. Start API:
+1. Import `database.sql` into `barangay` database.
+2. Place project in `C:\xampp\htdocs\barangay-reservation-system`.
+3. Update `api/config.php` database settings if needed.
+4. Open `http://localhost/barangay-reservation-system/index.php`.
 
-```bash
-cd server
-npm install
-node index.js
-```
+## Production Notes
 
-4. Open `index.html`.
+- Use HTTPS only.
+- Protect and rotate DB/SMTP secrets.
+- Keep session cookies `httpOnly` and secure in HTTPS setup.
+- Restrict CORS origin to known frontend host.
+- Add backup + restore testing for MySQL.
 
-## Recommended Production Setup
+## Release Checklist
 
-- Frontend: static hosting (Netlify/Vercel/GitHub Pages or equivalent)
-- Backend: Node.js service host (VM/container/PaaS)
-- Database: managed MySQL
-- TLS: mandatory HTTPS
+- Verify admin/staff login.
+- Verify reservation create/approve/reject.
+- Verify billing cash confirmation.
+- Verify user management (admin).
+- Verify forgot-password email reset.
+- Verify reports load and exports.
 
-## Production Checklist
-
-- Secrets stored outside source control
-- Passwords hashed at rest
-- CORS and auth headers configured
-- Rate limiting on auth and reset endpoints
-- Input validation on all write endpoints
-- DB backups and restore test
-- Error logging and monitoring enabled
-
-## Rollout Checklist
-
-- Verify role login by user type
-- Verify reservation create/update/delete
-- Verify request approval/rejection flow
-- Verify billing transitions
-- Verify reports data integrity
-- Verify forgot-password path end to end
-
-Last updated: 2026-02-28
+Last updated: 2026-03-03

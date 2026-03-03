@@ -1,31 +1,28 @@
 # Completion Summary
 
-Project status: complete for demo/integration workflows.
+Project status: ready for onsite demo workflow (staff/admin).
 
-## Delivered Areas
+## Delivered
 
-- Multi-role UI (resident, staff, admin)
-- Reservation lifecycle management
-- Facility management
-- Billing screens and payment-state handling
-- User management (admin)
-- Reporting dashboard
-- Notification handling
-- Signup and forgot-password flows
-- Backend API with protected routes
+- Role-based login and session auth (PHP sessions)
+- Reservation creation and review lifecycle
+- Facility management screens
+- Billing workflow with onsite cash confirmation
+- Admin user management
+- Notifications and reporting pages
+- Forgot-password reset via SMTP code
 
-## Documentation Cleanup
+## Documentation Status
 
-The Markdown set has been normalized to remove:
-- duplicated sections
-- outdated page/file counts
-- conflicting setup guidance
+All root Markdown files were updated on 2026-03-03 to match the current implementation:
+- PHP pages (`*.php`)
+- PHP API (`api/index.php`)
+- MySQL data model (`database.sql`)
 
-## Remaining Non-Blocking Improvements
+## Remaining Improvements
 
-- Expand automated tests (unit/integration/e2e)
-- Harden production security defaults
-- Add monitoring dashboards and alerting
-- Finalize production deployment pipeline
+- Add automated tests (API + UI)
+- Clarify/retire legacy resident signup path
+- Harden production deployment/security settings
 
-Last updated: 2026-02-28
+Last updated: 2026-03-03

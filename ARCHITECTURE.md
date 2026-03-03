@@ -1,51 +1,53 @@
 # Architecture
 
-## High-Level Layers
+## System Layers
 
 1. Presentation layer
-   - HTML pages and CSS UI
-   - Page scripts in `js/`
+- PHP pages in project root (`*.php`)
+- Shared styles in `css/style.css`
+- Page controllers in `js/*.js`
+
 2. Application layer
-   - Client API wrapper (`js/api.js`)
-   - Auth/session logic (`js/auth.js`)
-   - Backend REST API (`server/index.js`)
+- API client wrapper: `js/api.js`
+- Auth/session guard: `js/auth.js`
+- PHP REST API: `api/index.php`
+
 3. Data layer
-   - MySQL (online)
-   - localStorage fallback (offline)
+- MySQL schema: `database.sql`
+- Runtime DB connection: `api/db.php`
 
-## Frontend Structure
+## Auth Model
 
-- Page-specific controllers: `js/*-dashboard.js`, `js/*-requests.js`, `js/*-facilities.js`, etc.
-- Shared behavior:
-  - `js/api.js` for HTTP and fallback behavior
-  - `js/database.js` for localStorage storage model
-  - `js/auth.js` for route/role checks
+- Authentication uses PHP sessions.
+- Login endpoint stores user in `$_SESSION['user']`.
+- Frontend sends cookies using `credentials: 'include'`.
+- Guard helpers:
+  - `require_auth()`
+  - `require_role([...])`
 
-## Backend Structure
+## API Domains
 
-- Entry point: `server/index.js`
-- Stack: Express + mysql2 + firebase-admin + nodemailer
-- Middleware: auth token checks and role guards for protected routes
+- Auth: `/auth/*`
+- Users: `/users*`
+- Facilities: `/facilities*`
+- Reservations: `/reservations*`
+- Notifications: `/notifications*`
+- Forgot password: `/users/forgot-password/*`
 
-## Data Flow (Reservation)
+## Core Data Tables
 
-1. User submits reservation form.
-2. Frontend validates payload.
-3. `js/api.js` sends request to `/reservations`.
-4. If API is not reachable, local fallback path may be used.
-5. UI refreshes lists, status badges, and notifications.
+- `users`
+- `facilities`
+- `reservations`
+- `billing_transactions`
+- `notifications`
+- `password_reset_codes`
 
-## Security Baseline
+## Operational Rules
 
-- Role-based access checks in frontend and backend.
-- Server-side route guards for protected endpoints.
-- Password validation and reset flows.
+- Active login access is staff/admin only.
+- Reservation conflict checks run server-side before insert.
+- Soft-archive is used for users/facilities/reservations.
+- Billing flow is onsite-cash confirmation by staff/admin.
 
-## Production Notes
-
-- Enforce HTTPS.
-- Use strong secrets and rotate credentials.
-- Avoid plaintext password handling anywhere.
-- Add monitoring, audit logging, and backup policy.
-
-Last updated: 2026-02-28
+Last updated: 2026-03-03

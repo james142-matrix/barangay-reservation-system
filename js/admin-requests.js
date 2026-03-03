@@ -1,6 +1,6 @@
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuth('admin');
+    if (!checkAuth('admin')) return;
     loadRequests().catch(err => {
         showToast('Failed to load requests: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -11,6 +11,33 @@ let currentRequest = null;
 let currentRequests = [];
 let usersByUsername = new Map();
 let facilitiesById = new Map();
+
+function formatFullDate(dateValue) {
+    if (!dateValue) return '-';
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return String(dateValue);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime12Hour(timeValue) {
+    if (!timeValue) return '-';
+    const cleaned = String(timeValue).slice(0, 5);
+    const [h, m] = cleaned.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return String(timeValue);
+    const hour12 = (h % 12) || 12;
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
+function formatTimeRange(startTime, endTime) {
+    return `${formatTime12Hour(startTime)} - ${formatTime12Hour(endTime)}`;
+}
+
+function calculateAddonSubtotal(chairsCount, electronicsCount) {
+    const chairs = Number(chairsCount || 0);
+    const electronics = Number(electronicsCount || 0);
+    return (chairs * 10) + (electronics * 150);
+}
 
 function normalizeReservation(raw) {
     if (!raw) return raw;
@@ -28,6 +55,11 @@ function normalizeReservation(raw) {
         eventDescription: raw.eventDescription || raw.event_description || '',
         contactPerson: raw.contactPerson || raw.contact_person || '',
         contactPhone: raw.contactPhone || raw.contact_phone || '',
+        chairsCount: raw.chairsCount != null ? raw.chairsCount : (raw.chairs_count ?? 0),
+        electronicsCount: raw.electronicsCount != null ? raw.electronicsCount : (raw.electronics_count ?? 0),
+        paymentOption: raw.paymentOption || raw.payment_option || 'full',
+        downPaymentAmount: raw.downPaymentAmount != null ? Number(raw.downPaymentAmount) : (raw.down_payment_amount != null ? Number(raw.down_payment_amount) : 0),
+        paymentStatus: raw.paymentStatus || raw.payment_status || 'pending',
         totalCost: raw.totalCost != null ? Number(raw.totalCost) : (raw.total_cost != null ? Number(raw.total_cost) : 0),
         approvedBy: raw.approvedBy || raw.approved_by || null,
         approvedAt: raw.approvedAt || raw.approved_at || null,
@@ -71,14 +103,13 @@ function displayRequests(requests) {
         const residentName = resident ? resident.fullname : 'Unknown Resident';
         const facilityName = facility ? facility.name : 'Unknown Facility';
         const statusClass = req.status === 'pending' ? 'pending' : (req.status === 'approved' ? 'approved' : 'rejected');
-        const submittedDate = req.createdAt ? new Date(req.createdAt) : null;
-        const formattedSubmitted = submittedDate ? submittedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+        const formattedSubmitted = formatFullDate(req.createdAt);
 
         html += '<tr>';
         html += `<td><strong>${residentName}</strong></td>`;
         html += `<td>${facilityName}</td>`;
-        html += `<td>${formatDate(req.eventDate).split(' ')[0]}</td>`;
-        html += `<td>${req.startTime} - ${req.endTime}</td>`;
+        html += `<td>${formatFullDate(req.eventDate)}</td>`;
+        html += `<td>${formatTimeRange(req.startTime, req.endTime)}</td>`;
         html += `<td><span class="badge ${statusClass}">${req.status.charAt(0).toUpperCase() + req.status.slice(1)}</span></td>`;
         html += `<td>${formattedSubmitted}</td>`;
         html += `<td><button class="btn btn-sm btn-primary" onclick="openApprovalModal('${req.id}')">Review</button></td>`;
@@ -115,7 +146,7 @@ function openApprovalModal(requestId) {
         conflictHtml += '<strong>⚠️ Time Conflict Warning:</strong><br>';
         conflictHtml += 'Other approved reservations on this date/facility:';
         sameDay.forEach(r => {
-            conflictHtml += `<br>• ${r.startTime} - ${r.endTime}`;
+            conflictHtml += `<br>• ${formatTimeRange(r.startTime, r.endTime)}`;
         });
         conflictHtml += '</div>';
     }
@@ -123,36 +154,47 @@ function openApprovalModal(requestId) {
     let approvalBody = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
             <div>
-                <strong style="color: #667eea;">Resident Information</strong>
+                <strong style="color: #e83e8c;">Resident Information</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Name:</strong> ${residentName}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Contact:</strong> ${request.contactPerson}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Phone:</strong> ${request.contactPhone}</p>
             </div>
             <div>
-                <strong style="color: #667eea;">Facility & Booking</strong>
+                <strong style="color: #e83e8c;">Facility & Booking</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Facility:</strong> ${facilityName}</p>
-                <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatDate(request.eventStartDate || request.eventDate).split(' ')[0]}${request.eventEndDate && request.eventEndDate !== (request.eventStartDate || request.eventDate) ? ' → ' + formatDate(request.eventEndDate).split(' ')[0] : ''}</p>
-                <p style="margin: 5px 0; color: #666;"><strong>Time:</strong> ${request.startTime} - ${request.endTime}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Date:</strong> ${formatFullDate(request.eventStartDate || request.eventDate)}${request.eventEndDate && request.eventEndDate !== (request.eventStartDate || request.eventDate) ? ' → ' + formatFullDate(request.eventEndDate) : ''}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Time:</strong> ${formatTimeRange(request.startTime, request.endTime)}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Cost:</strong> ₱${Number(request.totalCost || 0).toFixed(2)}</p>
             </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
             <div>
-                <strong style="color: #667eea;">Event Details</strong>
+                <strong style="color: #e83e8c;">Event Details</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Type:</strong> ${request.eventType}</p>
                 <p style="margin: 5px 0; color: #666;"><strong>Expected Guests:</strong> ${request.expectedGuests}</p>
             </div>
             <div>
-                <strong style="color: #667eea;">Status</strong>
+                <strong style="color: #e83e8c;">Status</strong>
                 <p style="margin: 5px 0; color: #666;"><strong>Current:</strong> <span class="badge ${request.status}">${request.status.toUpperCase()}</span></p>
-                <p style="margin: 5px 0; color: #666;"><strong>Submitted:</strong> ${formatDate(request.createdAt)}</p>
+                <p style="margin: 5px 0; color: #666;"><strong>Submitted:</strong> ${formatFullDate(request.createdAt)}</p>
             </div>
         </div>
 
         <div style="background: #f9f9f9; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-            <strong style="color: #667eea;">Event Description</strong>
+            <strong style="color: #e83e8c;">Event Description</strong>
             <p style="margin: 8px 0; color: #666;">${request.eventDescription || 'No description provided'}</p>
+        </div>
+
+        <div style="background: #eef4ff; border: 1px solid #dce7ff; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+            <strong style="color: #3557d6;">Invoice Summary</strong>
+            <p style="margin: 8px 0 4px; color: #445;"><strong>Total Amount:</strong> ₱${Number(request.totalCost || 0).toFixed(2)}</p>
+            <p style="margin: 4px 0; color: #445;"><strong>Payment Option:</strong> ${request.paymentOption === 'down_payment' ? 'Down Payment' : 'Full Payment'}</p>
+            <p style="margin: 4px 0; color: #445;"><strong>Down Payment:</strong> ₱${Number(request.downPaymentAmount || 0).toFixed(2)}</p>
+            <p style="margin: 4px 0; color: #445;"><strong>Remaining Balance:</strong> ₱${Math.max(0, Number(request.totalCost || 0) - Number(request.downPaymentAmount || 0)).toFixed(2)}</p>
+            <p style="margin: 4px 0; color: #445;"><strong>Payment Status:</strong> ${(request.paymentStatus || 'pending').toUpperCase()}</p>
+            <p style="margin: 4px 0; color: #445;"><strong>Add-ons:</strong> Chairs ${Number(request.chairsCount || 0)}, Electronics ${Number(request.electronicsCount || 0)}</p>
+            <p style="margin: 4px 0; color: #445;"><strong>Add-on Subtotal:</strong> ₱${calculateAddonSubtotal(request.chairsCount, request.electronicsCount).toFixed(2)}</p>
         </div>
 
         ${conflictHtml}
@@ -173,7 +215,7 @@ function openApprovalModal(requestId) {
         approvalBody += `
             <div style="background: #d4edda; border-left: 4px solid #c3e6cb; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
                 <strong style="color: #155724;">Approved by Admin</strong>
-                <p style="margin: 5px 0; color: #155724;">Approved on: ${formatDate(request.approvedAt)}</p>
+                <p style="margin: 5px 0; color: #155724;">Approved on: ${formatFullDate(request.approvedAt)}</p>
             </div>
         `;
     }
@@ -341,5 +383,9 @@ document.addEventListener('click', function(event) {
         closeRejectModal();
     }
 });
+
+
+
+
 
 

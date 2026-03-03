@@ -17,11 +17,17 @@ function login() {
     if (window.AuthService && typeof AuthService.login === 'function') {
         AuthService.login(username, password)
             .then(function(user) {
-                const role = user.role || 'resident';
+                const role = user.role || '';
+                if (role !== 'admin' && role !== 'barangay_staff') {
+                    showMessage("Only staff and admin accounts can access this system.", "error");
+                    return;
+                }
                 const savedUsername = user.username || username;
                 if (typeof showToast === 'function') showToast(`Welcome, ${user.fullname || savedUsername}`, 'success');
 
-                const redirectUrl = role === "barangay_staff" ? "barangay-staff-dashboard.html" : (role === 'admin' ? 'admin-dashboard.html' : 'resident-dashboard.html');
+                const redirectUrl = role === "barangay_staff"
+                    ? "barangay-staff-dashboard.php?v=20260303b"
+                    : 'admin-dashboard.php?v=20260303b';
                 setTimeout(() => { window.location.href = redirectUrl; }, 800);
             })
             .catch(async function(err) {
@@ -78,9 +84,15 @@ async function forcePasswordChangeFlow(username, currentPassword) {
 
     try {
         const user = await window.api.changePasswordRequired(username, currentPassword, firstPrompt);
-        const role = user.role || 'resident';
+        const role = user.role || '';
+        if (role !== 'admin' && role !== 'barangay_staff') {
+            showMessage("Only staff and admin accounts can access this system.", "error");
+            return;
+        }
         if (typeof showToast === 'function') showToast('Password updated successfully.', 'success');
-        const redirectUrl = role === "barangay_staff" ? "barangay-staff-dashboard.html" : (role === 'admin' ? 'admin-dashboard.html' : 'resident-dashboard.html');
+        const redirectUrl = role === "barangay_staff"
+            ? "barangay-staff-dashboard.php?v=20260303b"
+            : 'admin-dashboard.php?v=20260303b';
         setTimeout(() => { window.location.href = redirectUrl; }, 900);
     } catch (error) {
         showMessage(error && error.message ? error.message : "Failed to change password", "error");
@@ -139,4 +151,5 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
 

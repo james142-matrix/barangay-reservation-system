@@ -1,6 +1,6 @@
 // Initialize resident dashboard
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('resident');
+    if (!checkAuth()) return;
     bindNotificationToggle();
     updateUserName();
     loadDashboard().catch(err => {
@@ -30,7 +30,9 @@ function updateUserName() {
 
 async function loadDashboard() {
     const user = getLoggedInUser();
-    const reservations = await window.api.getReservationsByUser(user.username);
+    const reservations = user && (user.role === 'barangay_staff' || user.role === 'admin')
+        ? await window.api.getAllReservations()
+        : await window.api.getReservationsByUser(user.username);
     const facilities = await window.api.getFacilities();
     const facilityMap = new Map(facilities.map(f => [String(f.id), f]));
     
@@ -69,7 +71,7 @@ function displayRecentReservations(reservations, facilityMap) {
                 <div class="empty-state-icon">📋</div>
                 <h3>No Reservations Yet</h3>
                 <p>You haven't made any reservations yet. Start by browsing our facilities!</p>
-                <a href="facilities.html" class="btn btn-primary">Browse Facilities</a>
+                <a href="facilities.php" class="btn btn-primary">Browse Facilities</a>
             </div>
         `;
         return;
@@ -98,7 +100,7 @@ function displayRecentReservations(reservations, facilityMap) {
                 <td>${formatDate(r.eventDate)}</td>
                 <td><span class="status-badge ${statusClass}">${r.status}</span></td>
                 <td>
-                    <a href="my-reservations.html" class="btn btn-small btn-secondary">View Details</a>
+                    <a href="my-reservations.php" class="btn btn-small btn-secondary">View Details</a>
                 </td>
             </tr>
         `;
@@ -165,7 +167,7 @@ function displayNotifications(username) {
     
     notifications.forEach(notif => {
         const bgColor = notif.type === 'approved' ? '#d4edda' : notif.type === 'rejected' ? '#f8d7da' : '#e7f3ff';
-        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#2196F3';
+        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#e83e8c';
         const readClass = notif.read ? 'opacity-50' : 'font-weight-bold';
         
         html += `
@@ -179,7 +181,7 @@ function displayNotifications(username) {
                         <p style="margin: 0 0 5px 0; color: #666; font-size: 13px;">${notif.message}</p>
                         <p style="margin: 0; font-size: 12px; color: #999;">${getTimeAgo(notif.createdAt)}</p>
                     </div>
-                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #2a5298; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
+                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #d63384; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
                 </div>
             </div>
         `;
@@ -223,4 +225,8 @@ function bindNotificationToggle() {
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
 }
+
+
+
+
 

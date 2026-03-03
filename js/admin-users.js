@@ -1,6 +1,6 @@
 // Initialize admin users page
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth('admin');
+    if (!checkAuth('admin')) return;
     loadUsers().catch(err => {
         showToast('Failed to load users: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -10,19 +10,18 @@ let editingUserId = null;
 let allUsers = [];
 
 async function loadUsers() {
-    allUsers = await window.api.getUsers();
+    const users = await window.api.getUsers();
+    allUsers = users.filter(u => u.role === 'admin' || u.role === 'barangay_staff');
     updateStats();
     displayUsers(allUsers);
 }
 
 function updateStats() {
     const total = allUsers.length;
-    const residents = allUsers.filter(u => u.role === 'resident').length;
     const staff = allUsers.filter(u => u.role === 'barangay_staff').length;
     const admins = allUsers.filter(u => u.role === 'admin').length;
 
     document.getElementById('stat-total-users').textContent = total;
-    document.getElementById('stat-residents').textContent = residents;
     document.getElementById('stat-staff').textContent = staff;
     document.getElementById('stat-admins').textContent = admins;
 }
@@ -57,8 +56,8 @@ function displayUsers(users) {
     `;
 
     users.forEach(user => {
-        const roleClass = user.role === 'admin' ? 'role-admin' : (user.role === 'barangay_staff' ? 'role-staff' : 'role-resident');
-        const roleLabel = user.role === 'admin' ? '👨‍💼 Admin' : (user.role === 'barangay_staff' ? '👷 Barangay Staff' : '👤 Resident');
+        const roleClass = user.role === 'admin' ? 'role-admin' : 'role-staff';
+        const roleLabel = user.role === 'admin' ? '👨‍💼 Admin' : '👷 Barangay Staff';
 
         html += `
             <tr>
@@ -66,10 +65,10 @@ function displayUsers(users) {
                 <td><strong>${user.username}</strong></td>
                 <td>${user.email}</td>
                 <td>${user.phone || 'N/A'}</td>
-                <td><span class="${roleClass}" style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; background: ${user.role === 'admin' ? '#667eea' : '#4facfe'}; color: white;">${roleLabel}</span></td>
+                <td><span class="${roleClass}" style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; background: ${user.role === 'admin' ? '#e83e8c' : '#f06292'}; color: white;">${roleLabel}</span></td>
                 <td>
                     <button class="btn-small btn-info" onclick="editUser(${user.id})" style="margin: 0 5px;">✏️ Edit</button>
-                    <button class="btn-small btn-danger" onclick="deleteUserConfirm(${user.id})" style="margin: 0 5px;">�️ Archive</button>
+                    <button class="btn-small btn-danger" onclick="deleteUserConfirm(${user.id})" style="margin: 0 5px;">🗄️ Archive</button>
                 </td>
             </tr>
         `;
@@ -184,23 +183,23 @@ async function saveUser(event) {
 }
 
 async function deleteUserConfirm(id) {
-    const removeUser = async () => {
+    const archiveUser = async () => {
         try {
             await window.api.deleteUser(id);
-            if (typeof showToast === 'function') showToast('User removed successfully!', 'success');
+            if (typeof showToast === 'function') showToast('User archived successfully!', 'success');
             loadUsers();
         } catch (error) {
-            showToast('Failed to remove user: ' + (error.message || 'Unknown error'), 'danger');
+            showToast('Failed to archive user: ' + (error.message || 'Unknown error'), 'danger');
         }
     };
 
     if (typeof showConfirm === 'function') {
-        showConfirm('Are you sure you want to remove this user?', removeUser);
+        showConfirm('Are you sure you want to archive this user?', archiveUser);
         return;
     }
 
-    if (confirm('Are you sure you want to remove this user?')) {
-        await removeUser();
+    if (confirm('Are you sure you want to archive this user?')) {
+        await archiveUser();
     }
 }
 
@@ -265,7 +264,7 @@ style.textContent = `
     }
 
     .btn-info {
-        background-color: #4facfe;
+        background-color: #f06292;
         color: white;
     }
 
@@ -283,14 +282,15 @@ style.textContent = `
     }
 
     .role-admin {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #e83e8c 0%, #c2185b 100%);
     }
 
-    .role-resident {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    }
     .role-staff {
         background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
     }
 `;
 document.head.appendChild(style);
+
+
+
+

@@ -9,7 +9,7 @@ function fetchSessionUserSync() {
 
     try {
         const xhr = new XMLHttpRequest();
-        const base = window.API_BASE_URL || 'http://localhost:3000';
+        const base = window.API_BASE_URL || '/barangay-reservation-system/api';
         xhr.open('GET', `${base}/auth/me`, false);
         xhr.withCredentials = true;
         xhr.send();
@@ -30,25 +30,31 @@ function fetchSessionUserSync() {
 function checkAuth(requiredRole) {
     const user = getLoggedInUser();
     if (!user) {
-        window.location.href = "index.html";
-        return;
+        window.location.href = "index.php?v=20260303b";
+        return false;
+    }
+    if (user.role !== 'admin' && user.role !== 'barangay_staff') {
+        window.location.href = "index.php?v=20260303b";
+        return false;
     }
 
     if (requiredRole && user.role !== requiredRole) {
         if (user.role === "admin") {
-            window.location.href = "admin-dashboard.html";
+            window.location.href = "admin-dashboard.php?v=20260303b";
         } else if (user.role === "barangay_staff") {
-            window.location.href = "barangay-staff-dashboard.html";
+            window.location.href = "barangay-staff-dashboard.php?v=20260303b";
         } else {
-            window.location.href = "resident-dashboard.html";
+            window.location.href = "index.php?v=20260303b";
         }
+        return false;
     }
+    return true;
 }
 
 // Logout function
 function logout() {
     showConfirm("Are you sure you want to logout?", function() {
-        const redirect = () => { window.location.href = "index.html"; };
+        const redirect = () => { window.location.href = "index.php?v=20260303b"; };
         __sessionUserCache = null;
         __sessionUserCacheTs = 0;
         if (window.AuthService && typeof window.AuthService.logout === 'function') {
@@ -200,3 +206,6 @@ function showToast(message, type = "success") {
         toast.remove();
     }, 4000);
 }
+
+
+

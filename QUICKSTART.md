@@ -1,41 +1,39 @@
 # Quick Start
 
-Use this if you want to run the project immediately.
+Fastest way to run the system on XAMPP.
 
-## Option A: Offline (No Server)
+## 1. Prepare Database
 
-1. Open `index.html`.
-2. Log in with demo credentials or create a resident account.
-3. Use the system features directly.
+1. Open phpMyAdmin.
+2. Create/select database `barangay`.
+3. Import `database.sql`.
 
-Data is stored in browser localStorage.
+## 2. Configure API
 
-## Option B: Online (MySQL + API)
+1. Open `api/config.php`.
+2. Confirm:
+   - `db_host`
+   - `db_port`
+   - `db_name`
+   - `db_user`
+   - `db_pass`
 
-1. Import `database.sql` into MySQL.
-2. Start backend API:
+## 3. Run in Browser
 
-```bash
-cd server
-npm install
-node index.js
-```
+Open:
+`http://localhost/barangay-reservation-system/index.php`
 
-3. Open `index.html`.
+## 4. Login
 
-## Smoke Test
+- Admin: `admin / admin123`
+- Staff: `staff1 / staff123`
 
-1. Login as resident.
-2. Create a reservation.
-3. Login as staff/admin and approve or reject it.
-4. Return to resident and confirm status update.
-5. If approved, complete billing flow.
+## 5. Smoke Test
 
-## Core Files
+1. Login as staff or admin.
+2. Create a reservation in `reserve.php`.
+3. Approve/reject in `*-requests.php`.
+4. Confirm cash payment in `*-billing.php`.
+5. Check reports (`reports.php`, admin only).
 
-- Frontend pages: root `*.html`
-- Frontend scripts: `js/*.js`
-- Backend API: `server/index.js`
-- DB schema/seed: `database.sql`
-
-Last updated: 2026-02-28
+Last updated: 2026-03-03
