@@ -1,18 +1,40 @@
 # TODO / Change Log
 
-## Resolved
+This file tracks what is done and what should be improved next.
 
-- Updated docs to match actual PHP API architecture.
-- Removed outdated Node/HTML-only guidance from Markdown set.
-- Aligned page lists to current `*.php` routes.
-- Documented current staff/admin-only login behavior.
-- Added dedicated system flow document (`SYSTEM-FLOW.md`).
+## Recently Completed
 
-## Next
+- Documentation updated to match current PHP + MySQL architecture.
+- Legacy Node/HTML-only notes removed from docs.
+- Page and route references aligned with current `*.php` and API endpoints.
+- Login policy documented clearly (admin/staff only).
+- End-to-end process documented in `SYSTEM-FLOW.md`.
+- Markdown files rewritten with clearer, simpler explanations.
 
-- Decide whether to keep or remove public `signup.php` (currently not aligned with API role policy).
-- Add automated API tests for auth/reservation/billing routes.
-- Add E2E smoke tests for admin/staff workflows.
-- Add DB migration versioning instead of runtime column checks only.
+## Current Known Gaps
 
-Last updated: 2026-03-03
+- Public `signup.php` flow may not fully align with current role policy.
+- Automated tests are still missing for key business flows.
+- DB schema versioning/migrations are not yet formalized.
+
+## Next Priorities
+
+1. Decide final policy for `signup.php`:
+- Keep with strict admin approval, or
+- Remove/disable if not needed in operations
+
+2. Add automated API tests for:
+- Auth
+- Reservations
+- Billing updates
+- Forgot-password
+
+3. Add end-to-end UI smoke tests for:
+- Staff workflow
+- Admin workflow
+
+4. Introduce migration/version strategy for DB changes:
+- Versioned SQL scripts
+- Upgrade history tracking
+
+Last updated: 2026-03-07

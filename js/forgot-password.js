@@ -82,7 +82,10 @@ async function resetPassword() {
 
     try {
         await window.api.resetPasswordWithCode(email, code, newPassword);
-        showMessage("Password changed successfully. You can now log in.", "success");
+        showMessage("Password changed successfully. Redirecting to login...", "success");
+        setTimeout(() => {
+            window.location.href = "index.php";
+        }, 1800);
     } catch (e) {
         const msg = e && e.message ? e.message : "Unknown error";
         showMessage("Reset failed: " + msg, "error");

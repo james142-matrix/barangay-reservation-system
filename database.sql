@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS users (
   address       TEXT          DEFAULT NULL,
   role          VARCHAR(50)   NOT NULL DEFAULT 'barangay_staff',
   force_password_change TINYINT(1) NOT NULL DEFAULT 0,
+  approval_status VARCHAR(20) NOT NULL DEFAULT 'approved',
+  approved_by   VARCHAR(100)  DEFAULT NULL,
+  approved_at   DATETIME      NULL DEFAULT NULL,
   archived      TINYINT(1)    NOT NULL DEFAULT 0,
   created_at    TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -44,6 +47,9 @@ CREATE TABLE IF NOT EXISTS facilities (
   price         DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
   icon          VARCHAR(20)    CHARACTER SET utf8mb4 DEFAULT NULL,
   status        VARCHAR(50)    DEFAULT 'available',
+  event_types   TEXT           DEFAULT NULL,
+  event_types_archived TEXT    DEFAULT NULL,
+  add_ons       TEXT           DEFAULT NULL,
   archived      TINYINT(1)     NOT NULL DEFAULT 0,
   created_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -54,6 +60,7 @@ CREATE TABLE IF NOT EXISTS facilities (
 CREATE TABLE IF NOT EXISTS reservations (
   id                INT AUTO_INCREMENT PRIMARY KEY,
   username          VARCHAR(255)   NOT NULL,
+  client_email      VARCHAR(255)   DEFAULT NULL,
   facility_id       INT            NOT NULL,
   event_date        DATE           NOT NULL,
   event_end_date    DATE           NULL,
@@ -67,8 +74,11 @@ CREATE TABLE IF NOT EXISTS reservations (
   chairs_count      INT            DEFAULT 0,
   electronics_count INT            DEFAULT 0,
   medical_room_details VARCHAR(255) DEFAULT NULL,
+  add_ons_snapshot  TEXT           DEFAULT NULL,
+  add_on_total      DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
   payment_option    VARCHAR(30)    NOT NULL DEFAULT 'full',
   down_payment_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  amount_paid       DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
   total_cost        DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
   status            VARCHAR(50)    NOT NULL DEFAULT 'pending',
   approved_by       VARCHAR(255)   DEFAULT NULL,
@@ -150,14 +160,14 @@ VALUES
 -- ============================================================
 -- DEFAULT DATA: 6 Facilities
 -- ============================================================
-INSERT IGNORE INTO facilities (id, name, description, capacity, price, icon, status)
+INSERT IGNORE INTO facilities (id, name, description, capacity, price, icon, status, event_types, add_ons)
 VALUES
-  (1, 'Community Hall',          'Large multi-purpose venue for events and gatherings',       200, 2000.00, '🏛️', 'available'),
-  (2, 'Sports Complex',          'Basketball court, badminton courts, and training facilities',150, 1500.00, '🏀', 'available'),
-  (3, 'Cultural Center',         'Dedicated space for cultural events and workshops',          100, 1000.00, '🎭', 'available'),
-  (4, 'Library & Learning Center','Quiet study area with meeting rooms',                       50,   500.00, '📚', 'available'),
-  (5, 'Medical Room',            'First aid and emergency medical services room',               20,   800.00, '🏥', 'available'),
-  (6, 'Garden Event Space',      'Outdoor venue with covered pavilion',                        300, 2500.00, '🌳', 'available');
+  (1, 'Community Hall',          'Large multi-purpose venue for events and gatherings',       200, 2000.00, '🏛️', 'available', '["Birthday Party","Wedding","Conference","Community Event","Other"]', '[{"id":"chairs","name":"Extra Chairs","price":10,"unit":"chair","enabled":true},{"id":"sound","name":"Sound System","price":500,"unit":"set","enabled":true}]'),
+  (2, 'Sports Complex',          'Basketball court, badminton courts, and training facilities',150, 1500.00, '🏀', 'available', '["Basketball","Volleyball","Badminton","Training","Other"]', '[{"id":"lights","name":"Floodlights","price":300,"unit":"hour","enabled":true},{"id":"scoreboard","name":"Scoreboard Setup","price":200,"unit":"event","enabled":true}]'),
+  (3, 'Cultural Center',         'Dedicated space for cultural events and workshops',          100, 1000.00, '🎭', 'available', '["Cultural Show","Workshop","Training","Community Event","Other"]', '[{"id":"projector","name":"Projector","price":350,"unit":"set","enabled":true},{"id":"mic","name":"Microphone Set","price":250,"unit":"set","enabled":true}]'),
+  (4, 'Library & Learning Center','Quiet study area with meeting rooms',                       50,   500.00, '📚', 'available', '["Study Session","Reading Program","Workshop","Seminar","Other"]', '[{"id":"whiteboard","name":"Whiteboard Kit","price":150,"unit":"set","enabled":true}]'),
+  (5, 'Medical Room',            'First aid and emergency medical services room',               20,   800.00, '🏥', 'available', '["Consultation","Checkup","Vaccination","First Aid","Other"]', '[]'),
+  (6, 'Garden Event Space',      'Outdoor venue with covered pavilion',                        300, 2500.00, '🌳', 'available', '["Wedding","Birthday Party","Reception","Community Event","Other"]', '[{"id":"tent","name":"Tent Package","price":1200,"unit":"set","enabled":true},{"id":"lights","name":"String Lights","price":400,"unit":"set","enabled":true}]');
 
 -- ============================================================
 -- Done! Your database is ready.

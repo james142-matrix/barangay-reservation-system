@@ -54,19 +54,18 @@ async function signup() {
             phone: phone,
             address: address,
             username: username,
-            password: password,
-            role: 'resident'
+            password: password
         };
 
         await window.api.signup(userData);
 
         if (typeof showToast === 'function') {
-            showToast(`Account created for ${username}`, 'success');
+            showToast(`Signup submitted for ${username}. Wait for admin approval.`, 'success');
             setTimeout(() => {
                 window.location.href = "index.php";
             }, 1000);
         } else {
-            showMessage("Account created successfully! Redirecting to login...", "success");
+            showMessage("Signup submitted! Wait for admin approval before login.", "success");
             setTimeout(() => { window.location.href = "index.php"; }, 1200);
         }
     } catch (error) {

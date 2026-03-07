@@ -1,99 +1,117 @@
 # Full-Stack Explanation
 
-This document explains how the current PHP stack works from browser to database.
+This document explains how the application works from browser screen to database write.
 
-## 1. Stack Summary
+## 1. Full Stack at a Glance
 
 - UI pages: root `*.php`
-- Frontend scripts: `js/*.js`
-- API: `api/index.php`
-- DB: MySQL (`database.sql`)
-- Auth: PHP session cookie
+- Frontend logic: `js/*.js`
+- API backend: `api/index.php`
+- Database: MySQL (`database.sql`)
+- Authentication: PHP session cookie
 
-## 2. Frontend Runtime
+## 2. What Happens When a User Opens a Page
 
-`js/api.js` is the central API client.
-- Base URL defaults to `/barangay-reservation-system/api`
-- Every request uses `credentials: 'include'`
-- Handles JSON error payloads and surfaces `error` message
+1. Browser loads a PHP page (example: `reserve.php`).
+2. Page JavaScript initializes.
+3. Auth check runs (`GET /auth/me`) for protected pages.
+4. If allowed, page fetches needed data (facilities, reservations, etc.).
+5. User actions trigger API calls.
 
-`js/auth.js` handles page access.
-- Sync call to `/auth/me` to get active session user
-- Redirects unauthenticated users to `index.php`
-- Enforces role-specific page access (`admin` / `barangay_staff`)
+## 3. Frontend Responsibilities
 
-## 3. Backend Request Routing
+### `js/api.js`
 
-`api/index.php`:
-1. Loads config and starts session.
-2. Loads DB and helper functions.
-3. Sets CORS/credentials headers.
-4. Routes by method + path.
-5. Returns JSON for all API responses.
+- Central helper for API calls
+- Uses base path `/barangay-reservation-system/api`
+- Sends credentials (`credentials: 'include'`) on every call
+- Parses JSON and throws readable errors
 
-## 4. Auth and Access Control
+### `js/auth.js`
 
-Login endpoint:
-- `POST /auth/login`
-- Checks `users` table + password hash
-- Blocks `resident` role from logging in
-- Stores sanitized user data in `$_SESSION['user']`
+- Validates active session on load
+- Redirects to `index.php` when not logged in
+- Redirects to proper dashboard on role mismatch
 
-Session endpoints:
-- `GET /auth/me`
-- `POST /auth/logout`
+## 4. Backend Responsibilities (`api/index.php`)
 
-Role checks:
-- `require_auth()` for signed-in access
-- `require_role([...])` for per-feature restrictions
+Main steps per request:
 
-## 5. Reservation Lifecycle
+1. Load config and start PHP session.
+2. Connect to MySQL through DB helper.
+3. Apply response headers (JSON, CORS, credentials policy).
+4. Parse route by HTTP method + path.
+5. Run auth/role/input validation.
+6. Run SQL queries.
+7. Return JSON success/error response.
 
-Create:
-- `POST /reservations`
-- Validates required fields, contact fields, guests vs capacity
-- Validates time range and overlap conflicts
-- Stores `status = pending`, `payment_status = pending`
+## 5. Authentication and Session Control
 
-Review:
-- `PUT /reservations/:id`
-- Staff/admin set approval or rejection fields
-- Notification entries are created by frontend flow
+### Login
+- Endpoint: `POST /auth/login`
+- Validates credentials against `users`
+- Blocks `resident` role
+- Stores safe user payload in `$_SESSION['user']`
 
-Billing:
-- Billing screens list approved unpaid reservations
-- Cash confirmation updates reservation with:
-  - `paymentStatus = cash`
-  - `paymentMethod = onsite_cash`
-  - `paymentDate = now`
-  - `status = completed`
+### Session Endpoints
+- `GET /auth/me`: returns current session user
+- `POST /auth/logout`: clears session
 
-## 6. User and Facility Management
+### Access Guards
+- `require_auth()` -> signed-in required
+- `require_role([...])` -> role required
 
-Users (`admin` only for write):
-- Create/update/archive in `admin-users.php`
-- API only allows `admin` and `barangay_staff` roles
+## 6. Reservation Lifecycle in Technical Terms
 
-Facilities (`admin` and `barangay_staff` write in current API):
-- CRUD via `/facilities`
-- Soft-archive on delete
+### Create Reservation
+- Endpoint: `POST /reservations`
+- Validates required fields and values
+- Checks schedule overlap for active records
+- Saves with:
+- `status = pending`
+- `payment_status = pending`
 
-## 7. Forgot Password
+### Review Reservation
+- Endpoint: `PUT /reservations/:id`
+- Approve or reject metadata is stored
+- UI creates corresponding notification record
+
+### Confirm Billing
+- Triggered from billing pages
+- Updates payment fields and completion status
+- Final state commonly becomes:
+- `paymentStatus = cash`
+- `paymentMethod = onsite_cash`
+- `status = completed`
+
+## 7. User and Facility Modules
+
+### Users
+- Admin page: `admin-users.php`
+- API supports create/update/archive
+- Allowed operational roles: `admin`, `barangay_staff`
+
+### Facilities
+- Managed by staff/admin pages
+- CRUD actions use `/facilities`
+- Delete is soft archive, not hard delete
+
+## 8. Forgot Password Module
 
 Endpoints:
 - `POST /users/forgot-password/check-email`
 - `POST /users/forgot-password/request`
 - `POST /users/forgot-password/reset`
 
-Behavior:
+Security behavior:
 - Generates 6-digit code
-- Stores only hashed code (`password_reset_codes`)
+- Stores hashed code only
 - Expires in 10 minutes
-- Sends code through SMTP from `api/config.php`
+- Marks code as used after successful reset
 
-## 8. Data Model
+## 9. Database Design Summary
 
-Main tables:
+Core operational tables:
 - `users`
 - `facilities`
 - `reservations`
@@ -101,6 +119,13 @@ Main tables:
 - `notifications`
 - `password_reset_codes`
 
-The API also runs lightweight compatibility checks at startup for optional columns.
+The API includes startup compatibility checks for optional columns to reduce runtime breakage in mixed environments.
 
-Last updated: 2026-03-03
+## 10. Why This Design Works for Barangay Workflow
+
+- Session auth is simple for local/server deployment.
+- Role controls limit who can perform operational actions.
+- Soft delete keeps historical data for reports and audits.
+- Clear pending -> approved/rejected -> completed flow matches onsite process.
+
+Last updated: 2026-03-07

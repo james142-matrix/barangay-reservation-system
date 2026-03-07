@@ -6,11 +6,11 @@
     <title>Manage Facilities - Barangay Molugan Staff</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="staff-facilities-page">
     <!-- Navbar -->
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan - Staff</a>
-</nav>
+    </nav>
 
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -26,69 +26,43 @@
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="dashboard-header">
-            <h1>Manage Facilities</h1>
-            <button class="btn btn-primary" onclick="openAddFacilityModal()">+ Add New Facility</button>
+        <div class="dashboard-header staff-facilities-hero">
+            <div>
+                <h1>Facilities Overview</h1>
+                <p>View all facilities and monitor capacity, pricing, and booking activity in one place.</p>
+            </div>
+            <div id="facilitiesQuickStats" class="staff-quick-stats">
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Total</span>
+                    <strong id="statTotalFacilities">0</strong>
+                </div>
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Available</span>
+                    <strong id="statAvailableFacilities">0</strong>
+                </div>
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Unavailable</span>
+                    <strong id="statUnavailableFacilities">0</strong>
+                </div>
+            </div>
         </div>
 
-        <!-- Facilities List -->
-        <div class="table-container">
-            <div class="table-header">
-                <h2>All Facilities</h2>
-            </div>
-            <div id="facilities-list">
-                <!-- Facilities will be loaded here -->
-            </div>
+        <div id="facilitiesContainer" class="facilities-grid staff-facilities-grid">
+            <!-- Cards will be loaded here -->
         </div>
     </main>
 
-    <!-- Add/Edit Facility Modal -->
+    <!-- Facility Details Modal -->
     <div id="facilityModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="modalTitle">Add New Facility</h2>
+                <h2 id="modalTitle">Facility Details</h2>
                 <button class="close-modal" onclick="closeFacilityModal()">×</button>
             </div>
-            <div class="modal-body">
-                <form id="facilityForm">
-                    <div class="form-group">
-                        <label for="facilityName">Facility Name</label>
-                        <input type="text" id="facilityName" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="facilityIcon">Icon/Emoji</label>
-                        <input type="text" id="facilityIcon" placeholder="e.g., 🏛️" maxlength="3">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="facilityCapacity">Capacity (persons)</label>
-                        <input type="number" id="facilityCapacity" required min="1">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="facilityPrice">Price per Event (₱)</label>
-                        <input type="number" id="facilityPrice" required min="0" step="0.01">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="facilityDescription">Description</label>
-                        <textarea id="facilityDescription" rows="4"></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="facilityStatus">Status</label>
-                        <select id="facilityStatus">
-                            <option value="available">Available</option>
-                            <option value="maintenance">Maintenance</option>
-                            <option value="unavailable">Unavailable</option>
-                        </select>
-                    </div>
-                </form>
-            </div>
+            <div class="modal-body" id="facilityModalBody"></div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeFacilityModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveFacility()">Save Facility</button>
+                <button class="btn btn-secondary" onclick="closeFacilityModal()">Close</button>
+                <a href="reserve.php" class="btn btn-primary">New Reservation</a>
             </div>
         </div>
     </div>
@@ -96,7 +70,7 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-facilities.js?v=20260303b"></script>
+    <script src="js/barangay-staff-facilities.js?v=20260306b"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>

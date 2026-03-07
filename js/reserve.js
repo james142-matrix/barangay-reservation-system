@@ -7,27 +7,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
     configureNavigation(user.role);
-    bindNotificationToggle();
     try {
         await loadFacilitiesDropdown();
     } catch (e) {
         console.error('Error loading facilities', e);
     }
     setupEventListeners();
-    loadNotifications();
-    
-    // Auto-refresh notifications every 3 seconds
-    setInterval(() => {
-        const user = getLoggedInUser();
-        if (user && user.role === 'resident') {
-            updateNotificationBadge(user.username);
-        }
-    }, 3000);
 });
 
 let facilitiesCache = [];
-const CHAIR_RATE = 10;
-const ELECTRONICS_RATE = 150;
+const DEFAULT_EVENT_TYPES = [
+    'Birthday Party',
+    'Wedding',
+    'Conference',
+    'Community Event',
+    'Sports Activity',
+    'Training/Workshop',
+    'Other'
+];
 
 function toIsoDate(dateObj) {
     const y = dateObj.getFullYear();
@@ -68,13 +65,14 @@ async function loadFacilitiesDropdown() {
     select.innerHTML = '<option value="">-- Choose a Facility --</option>';
 
     const facilities = await window.api.getFacilities();
-    facilitiesCache = Array.isArray(facilities) ? facilities : [];
+    const rawFacilities = Array.isArray(facilities) ? facilities : [];
+    facilitiesCache = rawFacilities.filter(f => String(f.status || 'available').toLowerCase() === 'available');
 
     console.log('facilities received for dropdown', facilities);
 
     if (facilitiesCache.length === 0) {
         select.innerHTML += '<option disabled value="">(no facilities available)</option>';
-        // show a warning so the resident understands the problem
+        // show a warning so the client understands the problem
         if (typeof showToast === 'function') {
             showToast('No facilities are currently available. Please try again later or contact an administrator.', 'warning');
         }
@@ -96,12 +94,184 @@ async function loadFacilitiesDropdown() {
         if (exists) {
             select.value = exists.id;
             updateFacilityPrice();
+            return;
+        }
+        if (typeof showToast === 'function') {
+            showToast('Selected facility is unavailable for reservation.', 'warning');
         }
     }
+    populateEventTypeOptions(null);
 }
 
 function getFacilityFromCache(facilityId) {
     return facilitiesCache.find(f => String(f.id) === String(facilityId)) || null;
+}
+
+function getDefaultEventTypesForFacility(facilityName) {
+    const name = String(facilityName || '').trim().toLowerCase();
+    if (name === 'medical room') return ['Consultation', 'Checkup', 'Vaccination', 'First Aid', 'Other'];
+    if (name === 'sports complex') return ['Basketball', 'Volleyball', 'Badminton', 'Training', 'Other'];
+    if (name === 'library & learning center') return ['Study Session', 'Reading Program', 'Workshop', 'Seminar', 'Other'];
+    if (name === 'community hall') return ['Birthday Party', 'Wedding', 'Conference', 'Community Event', 'Other'];
+    if (name === 'cultural center') return ['Cultural Show', 'Workshop', 'Training', 'Community Event', 'Other'];
+    if (name === 'garden event space') return ['Wedding', 'Birthday Party', 'Reception', 'Community Event', 'Other'];
+    return [...DEFAULT_EVENT_TYPES];
+}
+
+function normalizeFacilityEventTypes(raw, facilityName) {
+    let list = [];
+    if (Array.isArray(raw)) {
+        list = raw;
+    } else if (typeof raw === 'string' && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            list = Array.isArray(parsed) ? parsed : raw.split(/\r?\n|,/);
+        } catch {
+            list = raw.split(/\r?\n|,/);
+        }
+    }
+
+    const clean = [];
+    list.forEach(item => {
+        const value = String(item || '').trim();
+        if (!value) return;
+        if (!clean.includes(value)) clean.push(value);
+    });
+
+    if (clean.length) return clean;
+    if (Array.isArray(raw)) return [];
+    if (typeof raw === 'string' && raw.trim() !== '') return [];
+    return getDefaultEventTypesForFacility(facilityName);
+}
+
+function getEventTypesForFacility(facility) {
+    if (!facility) return [];
+    return normalizeFacilityEventTypes(facility.eventTypes, facility.name);
+}
+
+function normalizeFacilityAddOns(raw) {
+    let list = [];
+    if (Array.isArray(raw)) {
+        list = raw;
+    } else if (typeof raw === 'string' && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) list = parsed;
+        } catch {
+            list = [];
+        }
+    }
+    const clean = [];
+    list.forEach((item, index) => {
+        if (!item || typeof item !== 'object') return;
+        const id = String(item.id || `addon_${index + 1}`).trim() || `addon_${index + 1}`;
+        const name = String(item.name || '').trim();
+        const unit = String(item.unit || 'item').trim() || 'item';
+        const price = Math.max(0, Number(item.price || 0));
+        const enabled = !Object.prototype.hasOwnProperty.call(item, 'enabled') ? true : !!item.enabled;
+        if (!name || !enabled) return;
+        clean.push({ id, name, unit, price: Number(price.toFixed(2)), enabled });
+    });
+    return clean;
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function populateEventTypeOptions(facility) {
+    const eventTypeSelect = document.getElementById('eventType');
+    if (!eventTypeSelect) return;
+
+    const currentValue = eventTypeSelect.value;
+    eventTypeSelect.innerHTML = '';
+
+    if (!facility) {
+        eventTypeSelect.innerHTML = '<option value="">-- Select Facility First --</option>';
+        return;
+    }
+
+    const eventTypes = getEventTypesForFacility(facility);
+    eventTypeSelect.innerHTML = '<option value="">-- Select Event Type --</option>';
+    eventTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        eventTypeSelect.appendChild(option);
+    });
+
+    if (currentValue && eventTypes.includes(currentValue)) {
+        eventTypeSelect.value = currentValue;
+    } else {
+        eventTypeSelect.value = '';
+    }
+}
+
+function renderFacilityAddOns(facility) {
+    const group = document.getElementById('facilityAddOnsGroup');
+    const container = document.getElementById('facilityAddOnsContainer');
+    if (!group || !container) return;
+
+    if (!facility) {
+        group.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    const addOns = normalizeFacilityAddOns(facility.addOns);
+    if (!addOns.length) {
+        group.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    group.style.display = 'block';
+    container.innerHTML = addOns.map(addOn => `
+        <div class="form-row facility-addon-row">
+            <div class="form-group">
+                <label>${escapeHtml(addOn.name)} (${escapeHtml(addOn.unit)})</label>
+                <small style="color:#777;">₱${Number(addOn.price).toFixed(2)} per ${escapeHtml(addOn.unit)}</small>
+            </div>
+            <div class="form-group">
+                <label for="addonQty_${escapeHtml(addOn.id)}">Quantity</label>
+                <input
+                    type="number"
+                    id="addonQty_${escapeHtml(addOn.id)}"
+                    class="facility-addon-qty"
+                    data-addon-id="${escapeHtml(addOn.id)}"
+                    data-addon-name="${escapeHtml(addOn.name)}"
+                    data-addon-unit="${escapeHtml(addOn.unit)}"
+                    data-addon-price="${Number(addOn.price).toFixed(2)}"
+                    min="0"
+                    step="1"
+                    value="0">
+            </div>
+        </div>
+    `).join('');
+}
+
+function getSelectedFacilityAddOns() {
+    const container = document.getElementById('facilityAddOnsContainer');
+    if (!container) return [];
+    const inputs = container.querySelectorAll('.facility-addon-qty');
+    const selected = [];
+    inputs.forEach(input => {
+        const qty = Math.max(0, parseInt(input.value || '0', 10) || 0);
+        if (qty <= 0) return;
+        selected.push({
+            id: String(input.dataset.addonId || ''),
+            name: String(input.dataset.addonName || ''),
+            unit: String(input.dataset.addonUnit || 'item'),
+            price: Math.max(0, Number(input.dataset.addonPrice || 0)),
+            qty
+        });
+    });
+    return selected.filter(item => item.id);
 }
 
 function setupEventListeners() {
@@ -110,12 +280,12 @@ function setupEventListeners() {
     const endTimeInput = document.getElementById('endTime');
     const startDateInput = document.getElementById('eventDate');
     const endDateInput = document.getElementById('eventEndDate');
-    const chairsCountInput = document.getElementById('chairsCount');
-    const electronicsCountInput = document.getElementById('electronicsCount');
     const paymentOptionInput = document.getElementById('paymentOption');
     const clientNameInput = document.getElementById('clientName');
+    const clientEmailInput = document.getElementById('clientEmail');
     const contactPersonInput = document.getElementById('contactPerson');
     const contactPhoneInput = document.getElementById('contactPhone');
+    const addOnsContainer = document.getElementById('facilityAddOnsContainer');
     
     facilitySelect.addEventListener('change', updateFacilityPrice);
     startTimeInput.addEventListener('change', function() {
@@ -128,12 +298,15 @@ function setupEventListeners() {
     });
     startTimeInput.addEventListener('input', updateTimeDisplays);
     endTimeInput.addEventListener('input', updateTimeDisplays);
-    chairsCountInput.addEventListener('input', calculateCost);
-    electronicsCountInput.addEventListener('input', calculateCost);
     paymentOptionInput.addEventListener('change', toggleDownPaymentInput);
     if (clientNameInput) {
         clientNameInput.addEventListener('input', function() {
             this.value = sanitizeNameInput(this.value);
+        });
+    }
+    if (clientEmailInput) {
+        clientEmailInput.addEventListener('input', function() {
+            this.value = String(this.value || '').trim();
         });
     }
     if (contactPersonInput) {
@@ -146,14 +319,18 @@ function setupEventListeners() {
             this.value = sanitizePhoneInput(this.value);
         });
     }
-    if (chairsCountInput) {
-        chairsCountInput.addEventListener('input', function() {
-            this.value = sanitizeIntegerInput(this.value);
+    if (addOnsContainer) {
+        addOnsContainer.addEventListener('input', function(event) {
+            const target = event.target;
+            if (!target || !target.classList || !target.classList.contains('facility-addon-qty')) return;
+            target.value = sanitizeIntegerInput(target.value);
+            calculateCost();
         });
-    }
-    if (electronicsCountInput) {
-        electronicsCountInput.addEventListener('input', function() {
-            this.value = sanitizeIntegerInput(this.value);
+        addOnsContainer.addEventListener('change', function(event) {
+            const target = event.target;
+            if (!target || !target.classList || !target.classList.contains('facility-addon-qty')) return;
+            if (target.value === '') target.value = '0';
+            calculateCost();
         });
     }
     
@@ -231,6 +408,8 @@ function configureNavigation(role) {
     const usersItem = document.getElementById('nav-users-item');
     const reports = document.getElementById('nav-reports');
     const reportsItem = document.getElementById('nav-reports-item');
+    const archive = document.getElementById('nav-archive');
+    const archiveItem = document.getElementById('nav-archive-item');
     const cancelLink = document.getElementById('cancelLink');
 
     const links = isAdmin
@@ -240,7 +419,8 @@ function configureNavigation(role) {
             billing: 'admin-billing.php',
             facilities: 'admin-facilities.php',
             users: 'admin-users.php',
-            reports: 'reports.php'
+            reports: 'reports.php',
+            archive: 'admin-archive.php'
         }
         : {
             dashboard: 'barangay-staff-dashboard.php',
@@ -248,7 +428,8 @@ function configureNavigation(role) {
             billing: 'barangay-staff-billing.php',
             facilities: 'barangay-staff-facilities.php',
             users: '',
-            reports: ''
+            reports: '',
+            archive: ''
         };
 
     if (navBrand) {
@@ -265,6 +446,10 @@ function configureNavigation(role) {
     if (reports && reportsItem) {
         reports.href = links.reports;
         reportsItem.style.display = isAdmin ? '' : 'none';
+    }
+    if (archive && archiveItem) {
+        archive.href = links.archive;
+        archiveItem.style.display = isAdmin ? '' : 'none';
     }
     if (cancelLink) cancelLink.href = links.dashboard;
 }
@@ -290,6 +475,8 @@ function updateFacilityPrice() {
     if (!facilityId) {
         document.getElementById('facilityPrice').textContent = '₱0';
         document.getElementById('totalCost').textContent = '₱0';
+        populateEventTypeOptions(null);
+        renderFacilityAddOns(null);
         const medicalRoomGroup = document.getElementById('medicalRoomDetailsGroup');
         if (medicalRoomGroup) medicalRoomGroup.style.display = 'none';
         return;
@@ -299,6 +486,8 @@ function updateFacilityPrice() {
     const facilityPrice = facility ? Number(facility.price || 0) : 0;
     if (facility) {
         document.getElementById('facilityPrice').textContent = `₱${facilityPrice}`;
+        populateEventTypeOptions(facility);
+        renderFacilityAddOns(facility);
         const medicalRoomGroup = document.getElementById('medicalRoomDetailsGroup');
         if (medicalRoomGroup) {
             medicalRoomGroup.style.display = String(facility.name || '').toLowerCase() === 'medical room' ? 'block' : 'none';
@@ -313,8 +502,7 @@ function calculateCost() {
     const endDate = document.getElementById('eventEndDate').value;
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
-    const chairsCount = Math.max(0, parseInt(document.getElementById('chairsCount').value || '0', 10) || 0);
-    const electronicsCount = Math.max(0, parseInt(document.getElementById('electronicsCount').value || '0', 10) || 0);
+    const selectedAddOns = getSelectedFacilityAddOns();
     
     if (!facilityId || !startDate || !endDate || !startTime || !endTime) {
         document.getElementById('totalCost').textContent = '₱0';
@@ -340,7 +528,7 @@ function calculateCost() {
     document.getElementById('duration').textContent = durationText;
     
     const baseCost = facility ? facility.price * durationHours : 0;
-    const addOnCost = (chairsCount * CHAIR_RATE) + (electronicsCount * ELECTRONICS_RATE);
+    const addOnCost = selectedAddOns.reduce((sum, item) => sum + (item.price * item.qty), 0);
     const totalCost = baseCost + addOnCost;
     document.getElementById('totalCost').textContent = `₱${totalCost.toFixed(2)}`;
 }
@@ -362,10 +550,10 @@ async function submitReservation(event) {
     const expectedGuests = parseInt(document.getElementById('expectedGuests').value);
     const eventDescription = document.getElementById('eventDescription').value || '';
     const clientName = document.getElementById('clientName').value.trim();
+    const clientEmail = document.getElementById('clientEmail').value.trim();
     const contactPerson = document.getElementById('contactPerson').value.trim();
     const contactPhone = document.getElementById('contactPhone').value.trim();
-    const chairsCount = Math.max(0, parseInt(document.getElementById('chairsCount').value || '0', 10) || 0);
-    const electronicsCount = Math.max(0, parseInt(document.getElementById('electronicsCount').value || '0', 10) || 0);
+    const selectedAddOns = getSelectedFacilityAddOns();
     const medicalRoomDetails = (document.getElementById('medicalRoomDetails').value || '').trim();
     const paymentOption = document.getElementById('paymentOption').value;
     const downPaymentAmount = Math.max(0, parseFloat(document.getElementById('downPaymentAmount').value || '0') || 0);
@@ -376,7 +564,11 @@ async function submitReservation(event) {
         return;
     }
     if (clientName.length < 3) {
-        showToast('Client/Resident name is required', 'warning');
+        showToast('Client name is required', 'warning');
+        return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+        showToast('Please enter a valid client email address', 'warning');
         return;
     }
     
@@ -404,6 +596,15 @@ async function submitReservation(event) {
     const facility = getFacilityFromCache(facilityId);
     if (!facility) {
         showToast('Invalid facility selected', 'danger');
+        return;
+    }
+    if (String(facility.status || 'available').toLowerCase() !== 'available') {
+        showToast('Selected facility is currently unavailable for reservation', 'warning');
+        return;
+    }
+    const allowedEventTypes = getEventTypesForFacility(facility);
+    if (eventType && !allowedEventTypes.includes(eventType)) {
+        showToast('Selected event type is not allowed for this facility', 'warning');
         return;
     }
     
@@ -460,12 +661,14 @@ async function submitReservation(event) {
     
     // compute total cost before submitting
     const durationHoursCalc = (endDtCheck - startDtCheck) / (1000 * 60 * 60);
-    const totalCost = (facility.price * durationHoursCalc) + (chairsCount * CHAIR_RATE) + (electronicsCount * ELECTRONICS_RATE);
+    const addOnCost = selectedAddOns.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const totalCost = (facility.price * durationHoursCalc) + addOnCost;
 
     // Create reservation via backend API if possible
     try {
         const reservation = await window.api.createReservation({
             username: clientName,
+            clientEmail: clientEmail,
             facilityId: facilityId,
             eventDate: eventDate,           // legacy
             eventStartDate: eventDate,
@@ -477,8 +680,7 @@ async function submitReservation(event) {
             eventDescription: eventDescription,
             contactPerson: contactPerson,
             contactPhone: contactPhone,
-            chairsCount: chairsCount,
-            electronicsCount: electronicsCount,
+            addOns: selectedAddOns.map(item => ({ id: item.id, qty: item.qty })),
             medicalRoomDetails: medicalRoomDetails || null,
             paymentOption: paymentOption,
             downPaymentAmount: paymentOption === 'down_payment' ? downPaymentAmount : 0,
@@ -496,117 +698,6 @@ async function submitReservation(event) {
         showToast('Error creating reservation: ' + error.message, 'danger');
     }
 }
-
-// ===========================
-// NOTIFICATION FUNCTIONS
-// ===========================
-
-function loadNotifications() {
-    const user = getLoggedInUser();
-    updateNotificationBadge(user.username);
-}
-
-function updateNotificationBadge(username) {
-    const unreadCount = getUnreadNotificationsCount(username);
-    const badge = document.getElementById("notificationBadge");
-    
-    if (unreadCount > 0) {
-        badge.textContent = unreadCount;
-        badge.style.display = "inline-block";
-    } else {
-        badge.style.display = "none";
-    }
-}
-
-function toggleNotifications() {
-    const panel = document.getElementById("notificationPanel");
-    const user = getLoggedInUser();
-    
-    if (!panel.classList.contains('show')) {
-        panel.classList.add('show');
-        displayNotifications(user.username);
-    } else {
-        panel.classList.remove('show');
-    }
-}
-
-function displayNotifications(username) {
-    const panel = document.getElementById("notificationPanel");
-    const notifications = getNotificationsByUser(username);
-    
-    if (notifications.length === 0) {
-        panel.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: #999;">
-                <p>📭 No notifications yet</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let html = '<div style="max-height: 400px; overflow-y: auto;">';
-    
-    notifications.forEach(notif => {
-        const bgColor = notif.type === 'approved' ? '#d4edda' : notif.type === 'rejected' ? '#f8d7da' : '#e7f3ff';
-        const borderColor = notif.type === 'approved' ? '#28a745' : notif.type === 'rejected' ? '#dc3545' : '#e83e8c';
-        const readClass = notif.read ? 'opacity-50' : 'font-weight-bold';
-        
-        html += `
-            <div style="padding: 12px 15px; border-left: 4px solid ${borderColor}; background: ${bgColor}; cursor: pointer; border-bottom: 1px solid #eee; transition: all 0.3s;" 
-                 onmouseover="this.style.background='rgba(0,0,0,0.05)'" 
-                 onmouseout="this.style.background='${bgColor}'"
-                 onclick="markNotificationRead(${notif.id})">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex: 1; ${readClass}">
-                        <p style="margin: 0 0 5px 0; font-weight: bold; color: #333;">${notif.title}</p>
-                        <p style="margin: 0 0 5px 0; color: #666; font-size: 13px;">${notif.message}</p>
-                        <p style="margin: 0; font-size: 12px; color: #999;">${getTimeAgo(notif.createdAt)}</p>
-                    </div>
-                    ${!notif.read ? '<span style="display: inline-block; width: 8px; height: 8px; background: #d63384; border-radius: 50%; margin-left: 10px; margin-top: 4px;"></span>' : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    
-    panel.innerHTML = html;
-}
-
-function markNotificationRead(notificationId) {
-    markNotificationAsRead(notificationId);
-    const user = getLoggedInUser();
-    updateNotificationBadge(user.username);
-    displayNotifications(user.username);
-}
-
-function getTimeAgo(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-    
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-    if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
-    if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-// Close notification panel when clicking outside
-document.addEventListener('click', function(event) {
-    const panel = document.getElementById("notificationPanel");
-    if (!panel) return;
-    if (event.target.closest('#notificationToggleBtn') || event.target.closest('#notificationPanel')) return;
-    panel.classList.remove('show');
-});
-
-function bindNotificationToggle() {
-    const btn = document.getElementById('notificationToggleBtn');
-    if (!btn) return;
-    btn.addEventListener('click', toggleNotifications);
-}
-
-
 
 
 

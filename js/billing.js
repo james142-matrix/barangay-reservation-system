@@ -1,5 +1,5 @@
 // billing.js
-// Handles resident billing dashboard where users can pay for approved reservations
+// Handles client billing dashboard where users can pay for approved reservations
 
 document.addEventListener('DOMContentLoaded', function() {
     if (!checkAuth()) return;
@@ -235,6 +235,7 @@ function bindNotificationToggle() {
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
 }
+
 
 
 

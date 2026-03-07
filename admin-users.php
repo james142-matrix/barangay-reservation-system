@@ -22,6 +22,7 @@
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
             <li><a href="reserve.php">📝 New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
+            <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -47,10 +48,19 @@
                 <h3>Admins</h3>
                 <div class="value" id="stat-admins">0</div>
             </div>
+            <div class="stat-card approved">
+                <h3>Pending Approval</h3>
+                <div class="value" id="stat-pending">0</div>
+            </div>
         </div>
 
         <!-- Search and Filter -->
         <div class="table-container" style="margin-bottom: 20px;">
+            <div style="padding: 15px 15px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button id="tab-all" class="btn btn-secondary" type="button" onclick="setStatusTab('all')">All Users</button>
+                <button id="tab-pending" class="btn btn-secondary" type="button" onclick="setStatusTab('pending')">Pending Signups</button>
+                <button id="tab-approved" class="btn btn-secondary" type="button" onclick="setStatusTab('approved')">Approved Users</button>
+            </div>
             <div style="padding: 15px; display: flex; gap: 15px; align-items: center;">
                 <input 
                     type="text" 
@@ -128,7 +138,7 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-users.js?v=20260303b"></script>
+    <script src="js/admin-users.js?v=20260307b"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>

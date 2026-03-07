@@ -6,7 +6,7 @@
     <title>Manage Facilities - Barangay Molugan</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="staff-facilities-page">
     <!-- Navbar -->
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan - Admin</a>
@@ -22,30 +22,45 @@
             <li><a href="admin-facilities.php" class="active">🏛️ Facilities</a></li>
             <li><a href="reserve.php">📝 New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
+            <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="dashboard-header">
-            <h1>Manage Facilities</h1>
-            <button class="btn btn-primary" onclick="openAddFacilityModal()">+ Add New Facility</button>
+        <div class="dashboard-header staff-facilities-hero">
+            <div>
+                <h1>Facilities Overview</h1>
+                <p>Manage facility availability, pricing, event types, and booking activity with full admin control.</p>
+            </div>
+            <div class="staff-hero-actions">
+                <div id="facilitiesQuickStats" class="staff-quick-stats">
+                    <div class="quick-stat-card">
+                        <span class="quick-stat-label">Total</span>
+                        <strong id="statTotalFacilities">0</strong>
+                    </div>
+                    <div class="quick-stat-card">
+                        <span class="quick-stat-label">Available</span>
+                        <strong id="statAvailableFacilities">0</strong>
+                    </div>
+                    <div class="quick-stat-card">
+                        <span class="quick-stat-label">Unavailable</span>
+                        <strong id="statUnavailableFacilities">0</strong>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="openAddFacilityModal()">+ Add New Facility</button>
+            </div>
         </div>
 
         <!-- Facilities List -->
-        <div class="table-container">
-            <div class="table-header">
-                <h2>All Facilities</h2>
-            </div>
-            <div id="facilities-list">
-                <!-- Facilities will be loaded here -->
-            </div>
+        <div id="facilities-list" class="facilities-grid staff-facilities-grid">
+            <!-- Facilities cards will be loaded here -->
         </div>
     </main>
 
     <!-- Add/Edit Facility Modal -->
-    <div id="facilityModal" class="modal">
+    <div id="facilityModal" class="modal facility-edit-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modalTitle">Add New Facility</h2>
@@ -79,6 +94,19 @@
                     </div>
 
                     <div class="form-group">
+                        <label>Event Types</label>
+                        <div id="facilityEventTypeRows" class="facility-addon-editor"></div>
+                        <button type="button" class="btn btn-secondary btn-small" id="addFacilityEventTypeBtn">+ Add Event Type</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Facility Add-ons</label>
+                        <div id="facilityAddOnsRows" class="facility-addon-editor"></div>
+                        <button type="button" class="btn btn-secondary btn-small" id="addFacilityAddOnBtn">+ Add Add-on</button>
+                        <small style="color:#777; display:block; margin-top:8px;">No special format needed. Just fill Name, Price, and Unit.</small>
+                    </div>
+
+                    <div class="form-group">
                         <label for="facilityStatus">Status</label>
                         <select id="facilityStatus">
                             <option value="available">Available</option>
@@ -98,7 +126,7 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-facilities.js?v=20260303b"></script>
+    <script src="js/admin-facilities.js?v=20260306e"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>

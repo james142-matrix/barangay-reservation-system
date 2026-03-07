@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Approval Requests - Barangay Molugan</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=20260306d">
 </head>
-<body>
+<body class="requests-page">
     <!-- Navbar -->
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan - Admin</a>
@@ -22,30 +22,53 @@
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
             <li><a href="reserve.php">📝 New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
+            <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="dashboard-header">
-            <h1>Reservation Approval Requests</h1>
+        <div class="dashboard-header requests-hero">
+            <div>
+                <h1>Reservation Approval Requests</h1>
+                <p>Review and manage incoming client reservations with clear status tracking.</p>
+            </div>
+            <div class="requests-quick-stats">
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Pending</span>
+                    <strong id="statPendingCount">0</strong>
+                </div>
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Approved</span>
+                    <strong id="statApprovedCount">0</strong>
+                </div>
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Completed</span>
+                    <strong id="statCompletedCount">0</strong>
+                </div>
+                <div class="quick-stat-card">
+                    <span class="quick-stat-label">Rejected</span>
+                    <strong id="statRejectedCount">0</strong>
+                </div>
+            </div>
         </div>
 
         <!-- Filters -->
-        <div class="table-container" style="margin-bottom: 20px;">
-            <div style="padding: 15px; display: flex; gap: 15px; align-items: center;">
+        <div class="table-container requests-filter-shell">
+            <div class="filter-bar">
                 <input
                     type="text"
                     id="searchInput"
-                    placeholder="Search by resident name or facility..."
-                    onkeyup="filterRequests()"
-                    style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; flex: 1; max-width: 400px;">
-                <select id="statusFilter" onchange="filterRequests()" style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; width: 200px;">
+                    placeholder="Search by client name or facility..."
+                    onkeyup="filterRequests()">
+                <select id="statusFilter" onchange="filterRequests()">
                     <option value="">All Requests</option>
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
                 </select>
             </div>
         </div>
@@ -68,6 +91,9 @@
             <div class="modal-body" id="approvalBody"></div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeApprovalModal()">Close</button>
+                <button class="btn btn-secondary" id="editBtnModal" onclick="enterEditMode()">Edit Details</button>
+                <button class="btn btn-secondary" id="cancelEditBtnModal" onclick="cancelEditMode()" style="display:none;">Cancel Edit</button>
+                <button class="btn btn-primary" id="saveEditBtnModal" onclick="saveRequestEdits()" style="display:none;">Save Changes</button>
                 <button class="btn btn-danger" id="rejectBtnModal" onclick="showRejectForm()">Reject</button>
                 <button class="btn btn-success" id="approveBtnModal" onclick="approveResv()">Approve</button>
             </div>
@@ -95,7 +121,7 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-requests.js?v=20260303b"></script>
+    <script src="js/admin-requests.js?v=20260306g"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>

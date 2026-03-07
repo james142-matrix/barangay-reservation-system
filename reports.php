@@ -22,6 +22,7 @@
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
             <li><a href="reserve.php">📝 New Reservation</a></li>
             <li><a href="reports.php" class="active">📈 Reports</a></li>
+            <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -83,11 +84,11 @@
                 </div>
             </div>
 
-            <!-- Top Residents -->
+            <!-- Top Clients -->
             <div class="table-container">
-                <h3 style="margin-top: 0; color: #333; padding: 0 15px; padding-top: 15px;">👥 Top Residents</h3>
-                <div id="top-residents-list" style="padding: 15px;">
-                    <!-- Top residents will be loaded here -->
+                <h3 style="margin-top: 0; color: #333; padding: 0 15px; padding-top: 15px;">👥 Top Clients</h3>
+                <div id="top-clients-list" style="padding: 15px;">
+                    <!-- Top clients will be loaded here -->
                 </div>
             </div>
         </div>
@@ -95,7 +96,7 @@
         <!-- Status Breakdown -->
         <div class="table-container" style="margin-top: 20px;">
             <h3 style="margin-top: 0; color: #333; padding: 0 15px; padding-top: 15px;">📈 Status Breakdown</h3>
-            <div id="status-breakdown" style="padding: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div id="status-breakdown" style="padding: 15px; display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 15px;">
                 <!-- Status breakdown will be loaded here -->
             </div>
         </div>
@@ -120,10 +121,11 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/reports.js?v=20260303b"></script>
+    <script src="js/reports.js?v=20260306b"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>
+
 
 
 

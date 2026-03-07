@@ -1,52 +1,70 @@
 # Barangay Reservation System
 
-Staff/admin facility reservation and billing system for Barangay Molugan.
+A staff and admin reservation system for Barangay Molugan.
 
-## Overview
+This project is built with PHP, MySQL, and vanilla JavaScript. It is designed for onsite barangay operations where staff or admin process facility reservations, approvals, billing, and reports.
 
-This project is now fully PHP + MySQL based:
-- Frontend pages: top-level `*.php`
-- Frontend logic: `js/*.js` (vanilla JavaScript)
+## What This System Does
+
+The system helps your team:
+- Accept reservation requests for barangay facilities
+- Check schedule conflicts before saving
+- Approve or reject requests
+- Record onsite cash payments
+- Manage facilities and staff accounts
+- Send notifications for request updates
+- Reset passwords through email verification code
+
+## Who Can Access the System
+
+Only these roles can log in:
+- `admin`
+- `barangay_staff`
+
+Important:
+- `resident` login is currently blocked.
+- `signup.php` can create a pending staff account, but an admin must approve it first.
+
+## Technology Stack
+
+- Frontend pages: root `*.php` files
+- Frontend scripts: `js/*.js`
 - Backend API: `api/index.php`
-- Database schema/seed: `database.sql`
-- Session auth: PHP session cookie (`barangay_session`)
-
-Important current behavior:
-- Login is restricted to `admin` and `barangay_staff`.
-- Public resident self-signup is not part of the active onsite flow.
+- Database: MySQL (`database.sql`)
+- Authentication: PHP session cookie (`barangay_session`)
 
 ## Main Features
 
-- Role-based login (`admin`, `barangay_staff`)
-- Reservation creation with schedule conflict checking
-- Request review and approve/reject workflow
-- Billing tracking and onsite cash confirmation
+- Role-based authentication and page access
+- Reservation creation with overlap checking
+- Approval/rejection workflow
+- Onsite cash payment confirmation
 - Facility management
-- User management (admin)
-- Notifications
+- Admin user management
+- Notification records
 - Reports and exports
-- Forgot password via Gmail SMTP reset code
+- Forgot-password email reset
 
-## Current Pages
+## Main Pages
 
-### Public
+### Public Pages
 - `index.php`
 - `forgot-password.php`
-- `signup.php` (legacy UI; API currently allows admin/staff account creation via admin flow)
+- `signup.php`
 
-### Shared Staff/Admin Operations
+### Shared Staff/Admin Pages
 - `reserve.php`
 - `billing.php`
 - `facilities.php`
 - `my-reservations.php`
 
-### Barangay Staff
+### Barangay Staff Pages
 - `barangay-staff-dashboard.php`
 - `barangay-staff-requests.php`
 - `barangay-staff-facilities.php`
 - `barangay-staff-billing.php`
 
-### Admin
+### Admin Pages
 - `admin-dashboard.php`
 - `admin-requests.php`
 - `admin-facilities.php`
@@ -54,40 +72,62 @@ Important current behavior:
 - `admin-users.php`
 - `reports.php`
 
-## Quick Run (XAMPP)
+## Quick Setup (XAMPP)
 
-1. Import `database.sql` to MySQL (`barangay` database).
-2. Put this folder under XAMPP `htdocs`.
-3. Verify DB config in `api/config.php`.
-4. Open:
+1. Create database `barangay` in phpMyAdmin.
+2. Import `database.sql`.
+3. Place project folder inside `C:\xampp\htdocs`.
+4. Check database settings in `api/config.php`.
+5. Open:
    `http://localhost/barangay-reservation-system/index.php`
 
-Demo credentials:
+Demo accounts:
 - `admin / admin123`
 - `staff1 / staff123`
 
-## Gmail Setup (Forgot Password)
+## Forgot Password Email Setup
 
-Set these in `api/config.php`:
-- `smtp_user`
-- `smtp_pass` (Gmail App Password)
-- `smtp_from`
+Configure one mail mode in `api/config.php`.
 
-Keep:
-- `smtp_host = smtp.gmail.com`
-- `smtp_port = 587`
-- `smtp_secure = tls`
+### Option 1: SMTP (simple setup)
+- `mail_driver = smtp`
+- `smtp_user = your Gmail`
+- `smtp_pass = Gmail App Password`
+- `smtp_from = your Gmail`
+- Keep:
+  - `smtp_host = smtp.gmail.com`
+  - `smtp_port = 587`
+  - `smtp_secure = tls`
 
-## Documentation Index
+### Option 2: Gmail API (OAuth2)
+- `mail_driver = gmail_api`
+- `gmail_api_client_id`
+- `gmail_api_client_secret`
+- `gmail_api_refresh_token`
+- `gmail_api_sender`
 
-- `QUICKSTART.md`
-- `HOW-TO-USE.md`
-- `ARCHITECTURE.md`
-- `DEPLOYMENT.md`
-- `FULL-STACK-EXPLANATION.md`
-- `SYSTEM-FLOW.md` (new flow-to-flow guide)
-- `VERIFICATION.md`
-- `COMPLETION.md`
-- `TODO.md`
+Notes:
+- Reset email goes to the user email saved in `users` table.
+- If Gmail API is selected but credentials are empty, forgot-password returns config error.
 
-Last updated: 2026-03-03
+## Common Workflow
+
+1. Staff/admin logs in.
+2. Staff/admin creates reservation.
+3. Staff/admin approves or rejects request.
+4. Staff/admin confirms cash payment after client pays onsite.
+5. Admin checks users and reports.
+
+## Documentation Map
+
+- `QUICKSTART.md`: fastest local setup
+- `HOW-TO-USE.md`: daily operation guide
+- `ARCHITECTURE.md`: system design and layers
+- `SYSTEM-FLOW.md`: step-by-step business flow
+- `FULL-STACK-EXPLANATION.md`: browser-to-database behavior
+- `DEPLOYMENT.md`: local and production deployment
+- `VERIFICATION.md`: pre-demo and pre-release checks
+- `COMPLETION.md`: completed scope summary
+- `TODO.md`: remaining improvements
+
+Last updated: 2026-03-07

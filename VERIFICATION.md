@@ -1,39 +1,68 @@
 # Verification Checklist
 
-Use this checklist before demo/release.
+Use this checklist before demo, handoff, or release.
 
-## Documentation
+## 1. Documentation Accuracy
 
-- [x] `README.md` matches current PHP structure
-- [x] `QUICKSTART.md` reflects XAMPP/MySQL startup path
-- [x] `HOW-TO-USE.md` reflects staff/admin onsite workflow
-- [x] `ARCHITECTURE.md` reflects PHP API + session auth
-- [x] `DEPLOYMENT.md` reflects current deployment model
-- [x] `FULL-STACK-EXPLANATION.md` matches active code paths
-- [x] `SYSTEM-FLOW.md` exists and explains end-to-end flow
-- [x] `TODO.md` and `COMPLETION.md` are synchronized
+Mark each item once verified against actual behavior.
 
-## Application Smoke Tests
+- [ ] `README.md` matches current pages, API, and role policy
+- [ ] `QUICKSTART.md` works as-is on a clean local setup
+- [ ] `HOW-TO-USE.md` matches real staff/admin operations
+- [ ] `ARCHITECTURE.md` matches current PHP session architecture
+- [ ] `SYSTEM-FLOW.md` matches real API and page workflow
+- [ ] `FULL-STACK-EXPLANATION.md` matches active code paths
+- [ ] `DEPLOYMENT.md` matches deployment method in use
+- [ ] `TODO.md` and `COMPLETION.md` are synchronized
+
+## 2. UI Smoke Tests
 
 - [ ] Login works for `admin`
 - [ ] Login works for `barangay_staff`
-- [ ] Staff/admin can create reservation (`reserve.php`)
-- [ ] Staff/admin can approve/reject (`*-requests.php`)
-- [ ] Billing confirm cash works (`*-billing.php`)
-- [ ] Notifications appear after approval/rejection/payment
-- [ ] Admin user CRUD works in `admin-users.php`
-- [ ] Reports load in `reports.php`
-- [ ] Forgot-password reset works with Gmail SMTP
+- [ ] Unauthorized role is blocked
+- [ ] Reservation creation works in `reserve.php`
+- [ ] Request approve/reject works in `*-requests.php`
+- [ ] Billing cash confirmation works in `*-billing.php`
+- [ ] Notifications appear after request updates and payment
+- [ ] Admin user management works in `admin-users.php`
+- [ ] Reports load correctly in `reports.php`
+- [ ] Forgot-password flow works end-to-end
 
-## API Smoke Tests
+## 3. API Smoke Tests
 
 - [ ] `POST /auth/login`
 - [ ] `GET /auth/me`
 - [ ] `POST /auth/logout`
-- [ ] `GET/POST/PUT/DELETE /facilities`
-- [ ] `GET/POST/PUT/DELETE /reservations`
-- [ ] `GET/POST/PUT /notifications`
-- [ ] `GET/POST/PUT/DELETE /users` (role-restricted)
-- [ ] Forgot-password endpoints
+- [ ] `GET /facilities`
+- [ ] `POST /facilities`
+- [ ] `PUT /facilities/:id`
+- [ ] `DELETE /facilities/:id`
+- [ ] `GET /reservations`
+- [ ] `POST /reservations`
+- [ ] `PUT /reservations/:id`
+- [ ] `DELETE /reservations/:id`
+- [ ] `GET /notifications`
+- [ ] `POST /notifications`
+- [ ] `PUT /notifications/:id/read`
+- [ ] `GET /users`
+- [ ] `POST /users`
+- [ ] `PUT /users/:id`
+- [ ] `DELETE /users/:id`
+- [ ] `POST /users/forgot-password/check-email`
+- [ ] `POST /users/forgot-password/request`
+- [ ] `POST /users/forgot-password/reset`
 
-Last updated: 2026-03-03
+## 4. Data Verification
+
+- [ ] Reservation records show correct status transitions
+- [ ] Payment fields are correct after cash confirmation
+- [ ] Notification records match user actions
+- [ ] Archived items are hidden from normal active lists
+
+## 5. Release Decision
+
+- [ ] All critical checks passed
+- [ ] Known issues are documented
+- [ ] Team agrees build is ready for demo/release
+
+Last updated: 2026-03-07

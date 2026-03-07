@@ -1,53 +1,85 @@
 # Architecture
 
-## System Layers
+This document explains how the system is organized and how data moves between layers.
+
+## 1. High-Level Structure
+
+The system has 3 main layers:
 
 1. Presentation layer
-- PHP pages in project root (`*.php`)
-- Shared styles in `css/style.css`
-- Page controllers in `js/*.js`
+- Root PHP pages (`*.php`) render screens.
+- `css/style.css` provides shared styles.
+- `js/*.js` handles page behavior and API calls.
 
 2. Application layer
-- API client wrapper: `js/api.js`
-- Auth/session guard: `js/auth.js`
-- PHP REST API: `api/index.php`
+- `js/api.js` is the frontend API wrapper.
+- `js/auth.js` checks session and role access on protected pages.
+- `api/index.php` is the main backend API router.
 
 3. Data layer
-- MySQL schema: `database.sql`
-- Runtime DB connection: `api/db.php`
+- MySQL database stores business records.
+- `database.sql` defines schema and seed data.
+- `api/db.php` handles runtime DB connection.
 
-## Auth Model
+## 2. Request Lifecycle
 
-- Authentication uses PHP sessions.
-- Login endpoint stores user in `$_SESSION['user']`.
-- Frontend sends cookies using `credentials: 'include'`.
-- Guard helpers:
-  - `require_auth()`
-  - `require_role([...])`
+Typical flow for any protected action:
 
-## API Domains
+1. User opens a PHP page.
+2. Frontend script runs and verifies session (`GET /auth/me`).
+3. Frontend sends request to API endpoint.
+4. API validates auth, role, and input.
+5. API reads/writes MySQL.
+6. API returns JSON response.
+7. Frontend updates UI based on response.
 
-- Auth: `/auth/*`
-- Users: `/users*`
-- Facilities: `/facilities*`
-- Reservations: `/reservations*`
-- Notifications: `/notifications*`
-- Forgot password: `/users/forgot-password/*`
+## 3. Authentication Model
 
-## Core Data Tables
+- Login endpoint authenticates user credentials.
+- Successful login stores sanitized user data in `$_SESSION['user']`.
+- Browser includes session cookie on API calls (`credentials: 'include'`).
+- Guards used by API:
+- `require_auth()` for signed-in users
+- `require_role([...])` for role restrictions
 
-- `users`
-- `facilities`
-- `reservations`
-- `billing_transactions`
-- `notifications`
-- `password_reset_codes`
+## 4. Role and Access Rules
 
-## Operational Rules
+Current login policy:
+- Allowed: `admin`, `barangay_staff`
+- Blocked: `resident`
 
-- Active login access is staff/admin only.
-- Reservation conflict checks run server-side before insert.
-- Soft-archive is used for users/facilities/reservations.
-- Billing flow is onsite-cash confirmation by staff/admin.
+Role-based pages and actions are enforced in both frontend checks and backend API guards.
 
-Last updated: 2026-03-03
+## 5. API Domain Groups
+
+Main route groups:
+- `/auth/*`
+- `/users*`
+- `/facilities*`
+- `/reservations*`
+- `/notifications*`
+- `/users/forgot-password/*`
+
+## 6. Data Model (Core Tables)
+
+- `users`: accounts and role data
+- `facilities`: reservable locations/resources
+- `reservations`: request records and status
+- `billing_transactions`: payment history and billing details
+- `notifications`: user-targeted updates
+- `password_reset_codes`: hashed reset codes with expiry
+
+## 7. Important Business Rules
+
+- Reservation overlap checks run server-side before insert/update.
+- Many delete actions are soft delete (archive flag), not hard delete.
+- Billing completion is currently based on onsite cash confirmation.
+- Admin manages users; staff/admin manage operational reservation flow.
+
+## 8. Error Handling Approach
+
+- API returns JSON error payloads.
+- Frontend wrapper parses response and surfaces meaningful `error` messages.
+- Session or role failure redirects user to appropriate page.
+
+Last updated: 2026-03-07

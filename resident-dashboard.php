@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resident Dashboard - Barangay Molugan</title>
+    <title>Client Dashboard - Barangay Molugan</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -70,6 +70,7 @@
 <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>
+
 
 
 

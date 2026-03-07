@@ -59,7 +59,7 @@
     <script src="js/password-policy.js?v=20260303b"></script>
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/forgot-password.js?v=20260303b"></script>
+    <script src="js/forgot-password.js?v=20260306c"></script>
 </body>
 </html>
 

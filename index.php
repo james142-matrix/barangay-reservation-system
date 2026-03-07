@@ -46,7 +46,11 @@
             </div>
             
             <div class="link-text">
-                Onsite access only. Accounts are managed by system admin.
+                Onsite access only. Staff accounts require admin approval.
+            </div>
+
+            <div class="link-text" style="margin-top: 8px;">
+                New staff? <a href="signup.php">Submit signup request</a>
             </div>
             
             <div class="demo-info">

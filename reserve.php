@@ -15,13 +15,14 @@
     <!-- Sidebar -->
     <aside class="sidebar">
         <ul class="sidebar-menu">
-            <li><a href="#" id="nav-dashboard">📊 Dashboard</a></li>
-            <li><a href="#" id="nav-requests">📋 Approval Requests</a></li>
-            <li><a href="#" id="nav-billing">💳 Billing</a></li>
-            <li style="display:none;" id="nav-users-item"><a href="#" id="nav-users">👥 Users</a></li>
-            <li><a href="#" id="nav-facilities">🏛️ Facilities</a></li>
+            <li><a href="admin-dashboard.php" id="nav-dashboard">📊 Dashboard</a></li>
+            <li><a href="admin-requests.php" id="nav-requests">📋 Approval Requests</a></li>
+            <li><a href="admin-billing.php" id="nav-billing">💳 Billing</a></li>
+            <li id="nav-users-item"><a href="admin-users.php" id="nav-users">👥 Users</a></li>
+            <li><a href="admin-facilities.php" id="nav-facilities">🏛️ Facilities</a></li>
             <li><a href="reserve.php" class="active">📝 New Reservation</a></li>
-            <li style="display:none;" id="nav-reports-item"><a href="#" id="nav-reports">📈 Reports</a></li>
+            <li id="nav-reports-item"><a href="reports.php" id="nav-reports">📈 Reports</a></li>
+            <li id="nav-archive-item"><a href="admin-archive.php" id="nav-archive">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -30,12 +31,6 @@
     <main class="main-content">
         <div class="dashboard-header">
             <h1>Create New Reservation</h1>
-            <div class="notification-wrap">
-                <button id="notificationToggleBtn" class="btn notification-trigger" type="button">
-                    🔔 Notifications <span id="notificationBadge" class="notification-dot-count"></span>
-                </button>
-                <div id="notificationPanel" class="notification-panel"></div>
-            </div>
         </div>
 
         <div class="reservation-layout">
@@ -76,14 +71,7 @@
                         <div class="form-group">
                             <label for="eventType">Event Type *</label>
                             <select id="eventType" required>
-                                <option value="">-- Select Event Type --</option>
-                                <option value="Birthday">Birthday Party</option>
-                                <option value="Wedding">Wedding</option>
-                                <option value="Conference">Conference</option>
-                                <option value="Community">Community Event</option>
-                                <option value="Sports">Sports Activity</option>
-                                <option value="Training">Training/Workshop</option>
-                                <option value="Other">Other</option>
+                                <option value="">-- Select Facility First --</option>
                             </select>
                         </div>
 
@@ -98,8 +86,12 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="clientName">Client / Resident Name *</label>
+                            <label for="clientName">Client Name *</label>
                             <input type="text" id="clientName" required placeholder="Enter full name of client" pattern="[A-Za-z .'-]+" title="Letters and spaces only">
+                        </div>
+                        <div class="form-group">
+                            <label for="clientEmail">Client Email *</label>
+                            <input type="email" id="clientEmail" required placeholder="Enter client Gmail address">
                         </div>
 
                         <div class="form-group">
@@ -112,20 +104,10 @@
                             <input type="tel" id="contactPhone" required inputmode="numeric" maxlength="15" pattern="[0-9]{7,15}" title="Numbers only (7-15 digits)">
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="chairsCount">Chairs (Qty)</label>
-                                <input type="number" id="chairsCount" min="0" step="1" value="0">
-                            </div>
-                            <div class="form-group">
-                                <label for="electronicsCount">Electronics (Qty)</label>
-                                <input type="number" id="electronicsCount" min="0" step="1" value="0">
-                            </div>
-                        </div>
-                        <div style="margin-top:-8px; margin-bottom:14px;">
-                            <small style="color:#777;">
-                                Optional add-ons for billing only. Rate: ₱10 per chair, ₱150 per electronic unit. Leave 0 if none.
-                            </small>
+                        <div class="form-group" id="facilityAddOnsGroup" style="display:none;">
+                            <label>Facility Add-ons (Optional)</label>
+                            <div id="facilityAddOnsContainer"></div>
+                            <small style="color:#777;">Add-ons are specific to the selected facility.</small>
                         </div>
 
                         <div class="form-group" id="medicalRoomDetailsGroup" style="display:none;">
@@ -182,10 +164,11 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/reserve.js?v=20260303b"></script>
+    <script src="js/reserve.js?v=20260307a"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>
+
 
 
 

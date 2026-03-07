@@ -12,18 +12,20 @@
         const res = await fetch(BASE_URL + path, options);
         if (!res.ok) {
             const text = await res.text();
+            let parsed = null;
             try {
-                const parsed = JSON.parse(text);
-                const err = new Error(parsed.error || res.statusText);
-                if (parsed && typeof parsed === 'object') {
-                    Object.keys(parsed).forEach(key => {
-                        err[key] = parsed[key];
-                    });
-                }
-                throw err;
+                parsed = JSON.parse(text);
             } catch {
-                throw new Error(text || res.statusText);
+                parsed = null;
             }
+            if (parsed && typeof parsed === 'object') {
+                const err = new Error(parsed.error || res.statusText);
+                Object.keys(parsed).forEach(key => {
+                    err[key] = parsed[key];
+                });
+                throw err;
+            }
+            throw new Error(text || res.statusText);
         }
         // try parse JSON, but return text if it fails
         const contentType = res.headers.get('content-type') || '';
@@ -57,6 +59,17 @@
         return request('/facilities/' + id, { method: 'DELETE' });
     }
 
+    async function getArchivedFacilities() {
+        return request('/archive/facilities');
+    }
+
+    async function restoreArchivedFacility(id) {
+        return request('/archive/facilities/' + id + '/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
     async function getReservationsByUser(username) {
         return request(`/reservations?user=${encodeURIComponent(username)}`);
     }
@@ -87,8 +100,30 @@
         return request('/reservations/' + id, { method: 'DELETE' });
     }
 
+    async function getArchivedReservations() {
+        return request('/archive/reservations');
+    }
+
+    async function restoreArchivedReservation(id) {
+        return request('/archive/reservations/' + id + '/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
     async function getUsers() {
         return request('/users');
+    }
+
+    async function getArchivedUsers() {
+        return request('/archive/users');
+    }
+
+    async function restoreArchivedUser(id) {
+        return request('/archive/users/' + id + '/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
     }
 
     async function updateUser(id, data) {
@@ -122,12 +157,28 @@
         });
     }
 
-    // POST /users — register a new user; sends the already-hashed password
+    // POST /auth/signup — public staff signup request (pending admin approval)
     async function signup(userData) {
+        return request('/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData)
+        });
+    }
+
+    // POST /users — admin creates an active user account
+    async function createUser(userData) {
         return request('/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(userData)
+        });
+    }
+
+    async function approveUser(id) {
+        return request('/users/' + id + '/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
         });
     }
 
@@ -190,16 +241,24 @@
         createFacility,
         updateFacility,
         deleteFacility,
+        getArchivedFacilities,
+        restoreArchivedFacility,
         getReservationsByUser,
         getAllReservations,
         createReservation,
         updateReservation,
         deleteReservation,
+        getArchivedReservations,
+        restoreArchivedReservation,
         getNotificationsByUser,
         createNotification,
         markNotificationAsRead,
         signup,
+        createUser,
+        approveUser,
         getUsers,
+        getArchivedUsers,
+        restoreArchivedUser,
         updateUser,
         deleteUser,
         loginUser,

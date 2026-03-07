@@ -119,10 +119,6 @@
                 <h4>Pending Payments</h4>
                 <div class="stat-value" id="stat-pending-payment">0</div>
             </div>
-            <div class="billing-stat-card online">
-                <h4>Online Payments</h4>
-                <div class="stat-value" id="stat-online-paid">0</div>
-            </div>
             <div class="billing-stat-card cash">
                 <h4>Cash Payments</h4>
                 <div class="stat-value" id="stat-cash-paid">0</div>
@@ -133,15 +129,15 @@
         <div class="filter-bar">
             <div class="filter-group">
                 <label for="billingSearch">Search</label>
-                <input type="text" id="billingSearch" placeholder="Resident name, username, facility…" oninput="filterBillingTable()">
+                <input type="text" id="billingSearch" placeholder="Client name, username, facility…" oninput="filterBillingTable()">
             </div>
             <div class="filter-group">
                 <label for="paymentFilter">Payment Status</label>
                 <select id="paymentFilter" onchange="filterBillingTable()">
                     <option value="">All Payments</option>
                     <option value="pending">Unpaid</option>
-                    <option value="paid">Online Paid</option>
                     <option value="cash">Cash Paid</option>
+                    <option value="cancelled">Cancelled</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -151,6 +147,7 @@
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
                     <option value="rejected">Rejected</option>
                 </select>
             </div>
@@ -192,6 +189,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeBillingDetailModal()">Close</button>
+                <button class="btn btn-danger" id="modalCancelReservationBtn" style="display:none;" type="button">✖ Cancel Reservation</button>
                 <button class="btn btn-success" id="modalConfirmCashBtn" style="display:none;">💵 Confirm Cash Payment</button>
             </div>
         </div>
@@ -200,10 +198,11 @@
     <script src="js/database.js?v=20260303b"></script>
     <script src="js/auth.js?v=20260303b"></script>
     <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-billing.js?v=20260303b"></script>
+    <script src="js/admin-billing.js?v=20260306d"></script>
     <script src="js/responsive.js?v=20260303b"></script>
 </body>
 </html>
+
 
 
 
