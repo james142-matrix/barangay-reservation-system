@@ -1,0 +1,39 @@
+SIA PROJECT DOCUMENTATION GUIDE  
+COVER PAGE  TABLE OF CONTENTS  CHAPTER 1 (The Problem)  
+1.1 Introduction  
+1.2 Statement of the Problem  
+1.3 Conceptual Framework (IPO Model)  
+1.4 Objectives of the Study  
+1.4.1 General Objectives  
+1.4.2 Specific Objectives  
+1.5 Significance of the Study  
+1.6 Scope and Limitation  
+1.7 Definition of Terms  
+CHAPTER 2 (Review of Related Literature and Studies)  
+2.1 Foreign Related Studies  
+2.2 Local Related Studies  
+2.3 Synthesis  
+2.4 Research Gap  
+CHAPTER 3 (Research Design and Methodology)  
+3.1 Requirements Gathering and Analysis Phase  
+3.1.1 Research Ethics  
+3.2 Design Phase  
+3.3 Development Phase  
+3.4 Testing and Evaluation Phase  
+Functional and Non-Functional Requirements  Diagrams  
+1. Manual Process Flow (BPMN)  
+2. Proposed System Flow (Activity Diagram)  
+3. Use Case (By Role) - Complete  
+4. ERD  
+5. Context Diagram (optional)  
+6. Data Flow Diagram (optional)  
+Testing Results  
+1. Functionality Testing Results  
+          • Test Case Summary  
+2. Usability Testing Results  
+          • Computed System Usability Scale (SUS) Scores  
+          • Results and Discussion (Interpretation of your Usability Results) References  
+Appendices  
+1. Letter of Intent  
+2. Interview/Survey Questionnaires  
+3. Documentation Pictures 

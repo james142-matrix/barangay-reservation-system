@@ -1,10 +1,15 @@
+<?php
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Billing - Barangay Molugan Staff</title>
-    <link rel="stylesheet" href="css/style.css">
+    <title>Payments and Billing Management - Barangay Molugan Staff</title>
+    <link rel="stylesheet" href="css/style.css?v=<?php echo urlencode((string) filemtime(__DIR__ . '/css/style.css')); ?>">
     <style>
         .billing-stats {
             display: grid;
@@ -92,10 +97,10 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="barangay-staff-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="barangay-staff-requests.php">📋 Approval Requests</a></li>
-            <li><a href="barangay-staff-billing.php" class="active">💳 Billing</a></li>
+            <li><a href="barangay-staff-requests.php">📋 Review Requests</a></li>
+            <li><a href="barangay-staff-billing.php" class="active">💳 Payments & Billing</a></li>
             <li><a href="barangay-staff-facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="barangay-staff-reserve.php">➕ New Reservation</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -103,7 +108,7 @@
     <!-- Main Content -->
     <main class="main-content">
         <div class="dashboard-header">
-            <h1>💳 Billing Dashboard</h1>
+            <h1>💳 Payments and Billing Management</h1>
             <button class="btn btn-secondary" onclick="exportBillingCSV()" style="display:flex; align-items:center; gap:6px;">
                 📥 Export CSV
             </button>
@@ -145,10 +150,8 @@
                 <select id="resvStatusFilter" onchange="filterBillingTable()">
                     <option value="">All Statuses</option>
                     <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
-                    <option value="rejected">Rejected</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -195,13 +198,18 @@
         </div>
     </div>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-billing.js?v=20260306d"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/database.js')); ?>"></script>
+    <script src="js/auth.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/auth.js')); ?>"></script>
+    <script src="js/api.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/api.js')); ?>"></script>
+    <script src="js/barangay-staff-billing.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/barangay-staff-billing.js')); ?>"></script>
+    <script src="js/responsive.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/responsive.js')); ?>"></script>
 </body>
 </html>
+
+
+
+
+
 
 
 

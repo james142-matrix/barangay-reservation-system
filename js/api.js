@@ -3,11 +3,91 @@
 
 (function() {
     const BASE_URL = window.API_BASE_URL || '/barangay-reservation-system/api';
+    const TAB_SESSION_KEY = 'brs_tab_session_id';
+    const CSRF_TOKEN_KEY = 'brs_csrf_token';
+
+    function generateTabSessionId() {
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+            const bytes = new Uint8Array(24);
+            window.crypto.getRandomValues(bytes);
+            return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        }
+        return `${Date.now()}${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+    }
+
+    function getTabSessionId() {
+        try {
+            return sessionStorage.getItem(TAB_SESSION_KEY) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function setTabSessionId(value) {
+        const sessionId = String(value || '').trim();
+        if (!sessionId) return;
+        try {
+            sessionStorage.setItem(TAB_SESSION_KEY, sessionId);
+        } catch (e) {
+            // Ignore storage failures.
+        }
+    }
+
+    function clearTabSessionId() {
+        try {
+            sessionStorage.removeItem(TAB_SESSION_KEY);
+        } catch (e) {
+            // Ignore storage failures.
+        }
+    }
+
+    function getCsrfToken() {
+        try {
+            return sessionStorage.getItem(CSRF_TOKEN_KEY) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function setCsrfToken(value) {
+        const token = String(value || '').trim();
+        if (!token) return;
+        try {
+            sessionStorage.setItem(CSRF_TOKEN_KEY, token);
+        } catch (e) {
+            // Ignore storage failures.
+        }
+    }
+
+    function clearCsrfToken() {
+        try {
+            sessionStorage.removeItem(CSRF_TOKEN_KEY);
+        } catch (e) {
+            // Ignore storage failures.
+        }
+    }
+
+    function ensureTabSessionId() {
+        let sessionId = getTabSessionId();
+        if (!sessionId) {
+            sessionId = generateTabSessionId();
+            setTabSessionId(sessionId);
+        }
+        return sessionId;
+    }
 
     async function request(path, options) {
         options = options || {};
         options.headers = options.headers || {};
         options.credentials = 'include';
+        const tabSessionId = ensureTabSessionId();
+        if (tabSessionId) {
+            options.headers['X-Tab-Session'] = tabSessionId;
+        }
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+            options.headers['X-CSRF-Token'] = csrfToken;
+        }
 
         const res = await fetch(BASE_URL + path, options);
         if (!res.ok) {
@@ -23,6 +103,10 @@
                 Object.keys(parsed).forEach(key => {
                     err[key] = parsed[key];
                 });
+                if (res.status === 401 && (parsed.code === 'SESSION_EXPIRED' || parsed.code === 'UNAUTHORIZED')) {
+                    clearCsrfToken();
+                    clearTabSessionId();
+                }
                 throw err;
             }
             throw new Error(text || res.statusText);
@@ -30,7 +114,11 @@
         // try parse JSON, but return text if it fails
         const contentType = res.headers.get('content-type') || '';
         if (contentType.indexOf('application/json') !== -1) {
-            return res.json();
+            const payload = await res.json();
+            if (payload && typeof payload === 'object' && !Array.isArray(payload) && payload.csrfToken) {
+                setCsrfToken(payload.csrfToken);
+            }
+            return payload;
         }
         return res.text();
     }
@@ -184,30 +272,50 @@
 
     // POST /users/login — authenticate against MySQL
     async function loginUser(username, password) {
-        return request('/auth/login', {
+        // Always rotate tab session id on a fresh login attempt to avoid collisions
+        // when a browser tab was duplicated from an existing logged-in tab.
+        setTabSessionId(generateTabSessionId());
+        const user = await request('/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
+        if (user && user.sessionId) {
+            setTabSessionId(user.sessionId);
+        }
+        return user;
     }
 
     async function changePasswordRequired(username, currentPassword, newPassword) {
-        return request('/auth/change-password-required', {
+        const user = await request('/auth/change-password-required', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, currentPassword, newPassword })
         });
+        if (user && user.sessionId) {
+            setTabSessionId(user.sessionId);
+        }
+        return user;
     }
 
     async function getSessionUser() {
-        return request('/auth/me');
+        const user = await request('/auth/me');
+        if (user && user.sessionId) {
+            setTabSessionId(user.sessionId);
+        }
+        return user;
     }
 
     async function logout() {
-        return request('/auth/logout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
+        try {
+            return await request('/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } finally {
+            clearTabSessionId();
+            clearCsrfToken();
+        }
     }
 
     async function requestPasswordResetCode(email) {

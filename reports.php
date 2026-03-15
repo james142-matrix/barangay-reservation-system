@@ -1,10 +1,15 @@
+<?php
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports - Barangay Molugan</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=<?php echo urlencode((string) filemtime(__DIR__ . '/css/style.css')); ?>">
 </head>
 <body>
     <!-- Navbar -->
@@ -16,11 +21,11 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="admin-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="admin-requests.php">📋 Approval Requests</a></li>
-            <li><a href="admin-billing.php">💳 Billing</a></li>
+            <li><a href="admin-requests.php">📋 Review Requests</a></li>
+            <li><a href="admin-billing.php">💳 Payments & Billing</a></li>
             <li><a href="admin-users.php">👥 Users</a></li>
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="admin-reserve.php">➕ New Reservation</a></li>
             <li><a href="reports.php" class="active">📈 Reports</a></li>
             <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
@@ -35,7 +40,7 @@
 
         <!-- Date Range Filter -->
         <div class="table-container" style="margin-bottom: 20px; padding: 15px;">
-            <div style="display: flex; gap: 15px; align-items: center;">
+            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                 <label for="dateRange" style="font-weight: 600; color: #333;">Date Range:</label>
                 <select id="dateRange" onchange="updateReports()" style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; width: 200px;">
                     <option value="this-month">This Month</option>
@@ -43,6 +48,8 @@
                     <option value="last-6-months">Last 6 Months</option>
                     <option value="all-time">All Time</option>
                 </select>
+                <button id="exportCsvBtn" class="btn btn-primary" type="button">Export CSV</button>
+                <button id="exportPdfBtn" class="btn btn-secondary" type="button">Export PDF</button>
             </div>
         </div>
 
@@ -53,19 +60,19 @@
                 <div style="color: #999; margin-top: 8px;">Total Reservations</div>
             </div>
             <div class="stat-card">
-                <div style="font-size: 28px; font-weight: bold; color: #28a745;" id="approved-count">0</div>
-                <div style="color: #999; margin-top: 8px;">Approved</div>
+                <div style="font-size: 28px; font-weight: bold; color: #28a745;" id="billing-count">0</div>
+                <div style="color: #999; margin-top: 8px;">In Billing</div>
             </div>
             <div class="stat-card">
                 <div style="font-size: 28px; font-weight: bold; color: #ffa500;" id="pending-count">0</div>
                 <div style="color: #999; margin-top: 8px;">Pending</div>
             </div>
             <div class="stat-card">
-                <div style="font-size: 28px; font-weight: bold; color: #ff6b6b;" id="rejected-count">0</div>
-                <div style="color: #999; margin-top: 8px;">Rejected</div>
+                <div style="font-size: 28px; font-weight: bold; color: #ff6b6b;" id="cancelled-count">0</div>
+                <div style="color: #999; margin-top: 8px;">Cancelled</div>
             </div>
             <div class="stat-card">
-                <div style="font-size: 28px; font-weight: bold; color: #6f42c1;" id="completed-count">0</div>
+                <div style="font-size: 28px; font-weight: bold; color: #8b5cf6;" id="completed-count">0</div>
                 <div style="color: #999; margin-top: 8px;">Completed</div>
             </div>
             <div class="stat-card revenue">
@@ -96,7 +103,7 @@
         <!-- Status Breakdown -->
         <div class="table-container" style="margin-top: 20px;">
             <h3 style="margin-top: 0; color: #333; padding: 0 15px; padding-top: 15px;">📈 Status Breakdown</h3>
-            <div id="status-breakdown" style="padding: 15px; display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 15px;">
+            <div id="status-breakdown" style="padding: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px;">
                 <!-- Status breakdown will be loaded here -->
             </div>
         </div>
@@ -118,13 +125,18 @@
         </div>
     </main>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/reports.js?v=20260306b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/database.js')); ?>"></script>
+    <script src="js/auth.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/auth.js')); ?>"></script>
+    <script src="js/api.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/api.js')); ?>"></script>
+    <script src="js/reports.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/reports.js')); ?>"></script>
+    <script src="js/responsive.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/responsive.js')); ?>"></script>
 </body>
 </html>
+
+
+
+
+
 
 
 

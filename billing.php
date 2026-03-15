@@ -15,10 +15,10 @@
     <!-- Sidebar -->
     <aside class="sidebar">
         <ul class="sidebar-menu">
-            <li><a href="resident-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="barangay-staff-requests.php">📋 Approval Requests</a></li>
+            <li><a href="barangay-staff-dashboard.php">📊 Dashboard</a></li>
+            <li><a href="barangay-staff-requests.php">📋 Review Requests</a></li>
             <li><a href="facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="barangay-staff-reserve.php">➕ New Reservation</a></li>
             <li><a href="billing.php" class="active">💳 Billing</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
@@ -50,13 +50,18 @@
         </div>
     </main>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
+    <script src="js/database.js?v=20260309e"></script>
+    <script src="js/auth.js?v=20260309d"></script>
+    <script src="js/api.js?v=20260309d"></script>
     <script src="js/billing.js?v=20260303b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
+
+
 
 
 

@@ -1,74 +1,74 @@
 # Quick Start
 
-This is the fastest setup guide for local testing using XAMPP.
-
-## Goal
-
-After finishing this guide, you should be able to:
-- Open the login page
-- Sign in as admin or staff
-- Create and process at least one reservation
+Fastest local setup for the current PHP + MySQL version.
 
 ## Prerequisites
 
-- XAMPP installed (`Apache` + `MySQL`)
-- Project folder at:
-  `C:\xampp\htdocs\barangay-reservation-system`
-- `database.sql` file available in the project root
+- XAMPP with Apache and MySQL
+- Project path: `C:\xampp\htdocs\barangay-reservation-system`
+- Access to `database.sql`
 
-## Step 1: Start Services
+## 1. Start Services
 
 1. Open XAMPP Control Panel.
 2. Start `Apache`.
 3. Start `MySQL`.
 
-## Step 2: Prepare Database
+## 2. Create The Database
 
-1. Open phpMyAdmin (`http://localhost/phpmyadmin`).
-2. Create database named `barangay`.
-3. Select the `barangay` database.
-4. Import `database.sql`.
+1. Open `http://localhost/phpmyadmin`.
+2. Create database `barangay`.
+3. Import `database.sql`.
 
-Expected result:
-- Tables like `users`, `facilities`, and `reservations` are created.
+Expected tables include:
 
-## Step 3: Configure API Database Connection
+- `users`
+- `facilities`
+- `reservations`
+- `billing_transactions`
+- `notifications`
 
-1. Open `api/config.php`.
-2. Confirm database values:
-- `db_host`
-- `db_port`
-- `db_name`
-- `db_user`
-- `db_pass`
+## 3. Configure Environment
 
-Tip:
-- On most XAMPP setups, `db_user` is `root` and password may be blank.
+1. Copy `.env.example` to `.env`.
+2. Set at least:
+   - `DB_HOST`
+   - `DB_PORT`
+   - `DB_NAME`
+   - `DB_USER`
+   - `DB_PASS`
 
-## Step 4: Open the System
+Typical XAMPP default:
 
-Open in browser:
+- `DB_USER=root`
+- `DB_PASS=` blank
+
+## 4. Open The App
+
+Browse to:
+
 `http://localhost/barangay-reservation-system/index.php`
 
-## Step 5: Login (Demo Accounts)
+## 5. Sign In
 
-- Admin account: `admin / admin123`
-- Staff account: `staff1 / staff123`
+- Admin: `admin / admin123`
+- Staff: `staff1 / staff123`
 
-## Step 6: Quick Functional Test
+## 6. Quick Smoke Test
 
-1. Login as staff or admin.
-2. Go to `reserve.php` and create a reservation.
-3. Open requests page (`admin-requests.php` or `barangay-staff-requests.php`).
-4. Approve or reject the request.
-5. Open billing page and confirm cash payment if approved.
-6. Open `reports.php` (admin) to confirm reporting data loads.
+1. Log in as `admin`.
+2. Open `admin-reserve.php`.
+3. Create a reservation with a valid schedule.
+4. Open `admin-requests.php` and confirm it appears.
+5. Open `admin-billing.php` and collect down payment or full payment.
+6. Open `reports.php` and confirm data loads.
+7. Open `admin-archive.php` and confirm the archive center loads.
 
-## If Something Fails
+## Common Problems
 
-- Re-check `api/config.php` database credentials.
-- Confirm Apache and MySQL are both running.
-- Confirm `database.sql` was imported to `barangay`.
-- Confirm URL includes project folder name exactly.
+- DB connection error: check `.env` values.
+- Blank/failed API responses: verify Apache and MySQL are both running.
+- Login blocked: account may be pending approval or not an allowed role.
+- Forgot-password not sending: mail settings in `.env` are incomplete.
 
-Last updated: 2026-03-07
+Last updated: 2026-03-15

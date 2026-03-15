@@ -1,0 +1,3 @@
+ALTER TABLE facilities
+  ADD COLUMN IF NOT EXISTS allows_multi_day TINYINT(1) NOT NULL DEFAULT 0;
+

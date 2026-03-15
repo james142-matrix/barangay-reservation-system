@@ -10,6 +10,40 @@ let editingUserId = null;
 let allUsers = [];
 let currentStatusTab = 'all';
 
+function validateUserForm(userData) {
+    const fullname = String(userData.fullname || '').trim();
+    const username = String(userData.username || '').trim();
+    const email = String(userData.email || '').trim();
+    const phone = String(userData.phone || '').trim();
+    const address = String(userData.address || '').trim();
+
+    if (!/^[A-Za-z\s.'-]{3,100}$/.test(fullname)) {
+        return 'Full name must be 3-100 characters and contain letters and basic punctuation only.';
+    }
+
+    if (!/^[A-Za-z0-9_.-]{3,50}$/.test(username)) {
+        return 'Username must be 3-50 characters and use letters, numbers, dot, underscore, or hyphen only.';
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return 'Enter a valid email address.';
+    }
+
+    if (phone !== '' && !/^(?:09\d{9}|639\d{9})$/.test(phone)) {
+        return 'Phone must be a valid PH mobile number.';
+    }
+
+    if (address !== '' && (address.length < 8 || !/[A-Za-z]/.test(address))) {
+        return 'Address must include real place details.';
+    }
+
+    if (address.length > 180) {
+        return 'Address must be 180 characters or less.';
+    }
+
+    return null;
+}
+
 async function loadUsers() {
     const users = await window.api.getUsers();
     allUsers = users.filter(u => u.role === 'admin' || u.role === 'barangay_staff');
@@ -189,18 +223,36 @@ function editUser(id) {
     document.getElementById('userModal').style.display = 'flex';
 }
 
+function sanitizeNameInput(value) {
+    return String(value || '').replace(/[^A-Za-z\s.'-]/g, '');
+}
+
+function sanitizePhoneInput(value) {
+    return String(value || '').replace(/\D/g, '').slice(0, 12);
+}
+
+function sanitizeAddressInput(value) {
+    return String(value || '').replace(/[<>]/g, '').slice(0, 180);
+}
+
 async function saveUser(event) {
     event.preventDefault();
 
     const userData = {
-        fullname: document.getElementById('fullname').value,
-        username: document.getElementById('username').value,
-        email: document.getElementById('email').value,
+        fullname: document.getElementById('fullname').value.trim(),
+        username: document.getElementById('username').value.trim(),
+        email: document.getElementById('email').value.trim(),
         password: document.getElementById('password').value,
-        phone: document.getElementById('phone').value,
-        address: document.getElementById('address').value,
+        phone: document.getElementById('phone').value.trim(),
+        address: document.getElementById('address').value.trim(),
         role: document.getElementById('role').value
     };
+
+    const validationError = validateUserForm(userData);
+    if (validationError) {
+        showToast(validationError, 'danger');
+        return;
+    }
 
     if (userData.password) {
         if (window.passwordPolicy && typeof window.passwordPolicy.validatePassword === 'function') {
@@ -236,6 +288,30 @@ async function saveUser(event) {
     closeUserModal();
     loadUsers();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const fullnameInput = document.getElementById('fullname');
+    const phoneInput = document.getElementById('phone');
+    const addressInput = document.getElementById('address');
+
+    if (fullnameInput) {
+        fullnameInput.addEventListener('input', function() {
+            this.value = sanitizeNameInput(this.value);
+        });
+    }
+
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function() {
+            this.value = sanitizePhoneInput(this.value);
+        });
+    }
+
+    if (addressInput) {
+        addressInput.addEventListener('input', function() {
+            this.value = sanitizeAddressInput(this.value);
+        });
+    }
+});
 
 async function deleteUserConfirm(id, isPending = false) {
     const target = allUsers.find(u => String(u.id) === String(id));

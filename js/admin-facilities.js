@@ -304,23 +304,37 @@ async function loadFacilitiesList() {
 }
 
 function buildFacilityCardHtml(facility) {
+    const facilityIcon = resolveFacilityIcon(facility);
     const price = parseFloat(facility.price) || 0;
     const status = String(facility.status || 'available').toLowerCase();
     const statusClass = status === 'available' ? 'is-available' : 'is-unavailable';
     const statusLabel = status === 'available' ? 'Available' : capitalize(status);
-    const stats = reservationsByFacility.get(String(facility.id)) || { approved: 0, pending: 0, completed: 0 };
+    const stats = reservationsByFacility.get(String(facility.id)) || { review: 0, billing: 0, completed: 0, cancelled: 0 };
     const eventTypes = normalizeEventTypes(facility.eventTypes).slice(0, 3);
     const eventTypeHtml = eventTypes.length
         ? eventTypes.map(type => `<span class="staff-chip">${escapeHtml(type)}</span>`).join('')
         : '<span class="staff-chip">General Event</span>';
     const addOns = normalizeAddOns(facility.addOns);
+    const openingTime = String(facility.openingTime || '').trim();
+    const closingTime = String(facility.closingTime || '').trim();
+    const allowsOvernight = !!facility.allowsOvernight;
+    const allowsAllDay = !!facility.allowsAllDay;
+    const allowsMultiDay = !!facility.allowsMultiDay;
+    const maxDurationHours = Number.isFinite(Number(facility.maxDurationHours)) ? Number(facility.maxDurationHours) : null;
+    const rulesText = [
+        openingTime && closingTime ? `${formatTimeLabel(openingTime)} - ${formatTimeLabel(closingTime)}` : 'No hour limit',
+        `Overnight: ${allowsOvernight ? 'Allowed' : 'Not allowed'}`,
+        `All-day: ${allowsAllDay ? 'Allowed' : 'Not allowed'}`,
+        `Multi-day: ${allowsMultiDay ? 'Allowed' : 'Not allowed'}`,
+        maxDurationHours && maxDurationHours > 0 ? `Max: ${maxDurationHours}h` : 'Max: none'
+    ].join(' • ');
     const addOnChipHtml = addOns.length
         ? addOns.slice(0, 3).map(item => `<span class="staff-chip">${escapeHtml(item.name)}</span>`).join('')
         : '<span class="staff-chip">No Add-ons</span>';
 
     return `
         <div class="facility-image staff-facility-image">
-            <div class="staff-facility-icon">${facility.icon || '🏛️'}</div>
+            <div class="staff-facility-icon">${facilityIcon}</div>
             <span class="staff-status-badge ${statusClass}">${statusLabel}</span>
         </div>
         <div class="facility-info">
@@ -336,13 +350,15 @@ function buildFacilityCardHtml(facility) {
             </div>
             <div class="staff-chip-row">${eventTypeHtml}</div>
             <div class="staff-chip-row">${addOnChipHtml}</div>
+            <p class="staff-facility-rules">${escapeHtml(rulesText)}</p>
             <div class="staff-facility-meta">
-                <span class="staff-pill staff-pill-approved">✓ ${stats.approved} approved</span>
-                <span class="staff-pill staff-pill-pending">⏳ ${stats.pending} pending</span>
+                <span class="staff-pill staff-pill-pending">📝 ${stats.review} pending</span>
+                <span class="staff-pill staff-pill-approved">💳 ${stats.billing} in billing</span>
             </div>
             <div class="staff-facility-meta">
-                <span class="staff-pill staff-pill-completed">✔ ${stats.completed} completed</span>
-                <span class="staff-pill">Total ${stats.approved + stats.pending + stats.completed}</span>
+                <span class="staff-pill staff-pill-completed">🏁 ${stats.completed} completed</span>
+                <span class="staff-pill staff-pill-rejected">✖ ${stats.cancelled} cancelled</span>
+                <span class="staff-pill">Total ${stats.review + stats.billing + stats.completed + stats.cancelled}</span>
             </div>
             ${canManageFacilities
                 ? `<div class="staff-facility-meta" style="margin-top:auto;">
@@ -363,14 +379,15 @@ function buildReservationSummary(reservations) {
         if (!facilityId) return;
 
         if (!reservationsByFacility.has(facilityId)) {
-            reservationsByFacility.set(facilityId, { approved: 0, pending: 0, completed: 0 });
+            reservationsByFacility.set(facilityId, { review: 0, billing: 0, completed: 0, cancelled: 0 });
         }
 
         const row = reservationsByFacility.get(facilityId);
         const rowStatus = String(raw.status || '').toLowerCase();
-        if (rowStatus === 'approved') row.approved += 1;
-        if (rowStatus === 'pending') row.pending += 1;
+        if (rowStatus === 'pending') row.review += 1;
+        if (rowStatus === 'billing') row.billing += 1;
         if (rowStatus === 'completed') row.completed += 1;
+        if (rowStatus === 'cancelled') row.cancelled += 1;
     });
 }
 
@@ -400,6 +417,12 @@ function openAddFacilityModal() {
     document.getElementById('facilityForm').reset();
     document.getElementById('facilityIcon').value = '🏛️';
     document.getElementById('facilityStatus').value = 'available';
+    document.getElementById('facilityOpeningTime').value = '';
+    document.getElementById('facilityClosingTime').value = '';
+    document.getElementById('facilityAllowsOvernight').value = '0';
+    document.getElementById('facilityAllowsAllDay').value = '0';
+    document.getElementById('facilityAllowsMultiDay').value = '0';
+    document.getElementById('facilityMaxDurationHours').value = '';
     renderEventTypeRows(DEFAULT_EVENT_TYPES, []);
     renderAddOnRows([]);
     document.getElementById('facilityModal').classList.add('show');
@@ -416,11 +439,17 @@ function editFacility(facilityId) {
     currentFacilityId = facilityId;
     document.getElementById('modalTitle').textContent = 'Edit Facility';
     document.getElementById('facilityName').value = facility.name;
-    document.getElementById('facilityIcon').value = facility.icon;
+    document.getElementById('facilityIcon').value = resolveFacilityIcon(facility);
     document.getElementById('facilityCapacity').value = facility.capacity;
     document.getElementById('facilityPrice').value = facility.price;
     document.getElementById('facilityDescription').value = facility.description || '';
     document.getElementById('facilityStatus').value = facility.status || 'available';
+    document.getElementById('facilityOpeningTime').value = (facility.openingTime || '').slice(0, 5);
+    document.getElementById('facilityClosingTime').value = (facility.closingTime || '').slice(0, 5);
+    document.getElementById('facilityAllowsOvernight').value = facility.allowsOvernight ? '1' : '0';
+    document.getElementById('facilityAllowsAllDay').value = facility.allowsAllDay ? '1' : '0';
+    document.getElementById('facilityAllowsMultiDay').value = facility.allowsMultiDay ? '1' : '0';
+    document.getElementById('facilityMaxDurationHours').value = facility.maxDurationHours != null ? String(facility.maxDurationHours) : '';
     renderEventTypeRows(facility.eventTypes, facility.archivedEventTypes || []);
     renderAddOnRows(facility.addOns);
     
@@ -435,11 +464,26 @@ async function saveFacility() {
     const price = parseFloat(document.getElementById('facilityPrice').value);
     const description = document.getElementById('facilityDescription').value.trim();
     const status = document.getElementById('facilityStatus').value;
+    const openingTime = String(document.getElementById('facilityOpeningTime').value || '').trim();
+    const closingTime = String(document.getElementById('facilityClosingTime').value || '').trim();
+    const allowsOvernight = document.getElementById('facilityAllowsOvernight').value === '1';
+    const allowsAllDay = document.getElementById('facilityAllowsAllDay').value === '1';
+    const allowsMultiDay = document.getElementById('facilityAllowsMultiDay').value === '1';
+    const maxDurationRaw = String(document.getElementById('facilityMaxDurationHours').value || '').trim();
+    const maxDurationHours = maxDurationRaw === '' ? null : parseInt(maxDurationRaw, 10);
     const eventTypesPayload = collectEventTypesFromRows();
     const addOns = collectAddOnsFromRows();
 
     if (!name || !capacity || isNaN(price)) {
         if (typeof showToast === 'function') showToast('Please fill in all required fields', 'warning');
+        return;
+    }
+    if ((openingTime && !closingTime) || (!openingTime && closingTime)) {
+        if (typeof showToast === 'function') showToast('Set both opening and closing time, or leave both blank.', 'warning');
+        return;
+    }
+    if (maxDurationRaw !== '' && (!Number.isFinite(maxDurationHours) || maxDurationHours <= 0)) {
+        if (typeof showToast === 'function') showToast('Maximum duration must be a positive whole number.', 'warning');
         return;
     }
 
@@ -450,6 +494,12 @@ async function saveFacility() {
         price,
         description,
         status,
+        openingTime: openingTime || null,
+        closingTime: closingTime || null,
+        allowsOvernight,
+        allowsAllDay,
+        allowsMultiDay,
+        maxDurationHours,
         eventTypes: eventTypesPayload.active,
         archivedEventTypes: eventTypesPayload.archived,
         addOns
@@ -518,6 +568,36 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function defaultFacilityIconByName(name) {
+    const key = String(name || '').trim().toLowerCase();
+    if (key === 'community hall') return '🏛️';
+    if (key === 'sports complex') return '🏀';
+    if (key === 'cultural center') return '🎭';
+    if (key === 'library & learning center') return '📚';
+    if (key === 'medical room') return '🏥';
+    if (key === 'garden event space') return '🌳';
+    return '🏛️';
+}
+
+function resolveFacilityIcon(facility) {
+    const icon = String((facility && facility.icon) || '').trim();
+    if (!icon || icon.includes('?')) return defaultFacilityIconByName(facility && facility.name);
+    return icon;
+}
+
+function formatTimeLabel(timeValue) {
+    const value = String(timeValue || '').trim();
+    if (!value.includes(':')) return value;
+    const parts = value.split(':');
+    let hour = parseInt(parts[0], 10);
+    const minute = parts[1] || '00';
+    if (!Number.isFinite(hour)) return value;
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    return `${hour}:${minute} ${suffix}`;
+}
+
 // Close modal when clicking outside
 document.addEventListener('click', function(event) {
     const modal = document.getElementById('facilityModal');
@@ -525,6 +605,3 @@ document.addEventListener('click', function(event) {
         closeFacilityModal();
     }
 });
-
-
-

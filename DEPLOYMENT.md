@@ -1,62 +1,87 @@
 # Deployment
 
-This guide explains how to deploy the system for local use and production use.
+Deployment notes for the current PHP/XAMPP-style setup.
 
-## 1. Deployment Targets
+## 1. Required Environment
 
-- Local/Development: XAMPP + PHP + MySQL
-- Production: Apache or Nginx + PHP + MySQL + HTTPS
+Create `.env` from `.env.example` and set:
 
-## 2. Local Deployment (XAMPP)
+- `APP_ENV`
+- `APP_DEBUG`
+- `APP_TIMEZONE`
+- `APP_LOG_DIR`
+- `DB_HOST`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USER`
+- `DB_PASS`
+- `SESSION_NAME`
+- `SESSION_IDLE_TIMEOUT_SEC`
+- `LOGIN_RATE_LIMIT_*`
 
-1. Copy project to:
-   `C:\xampp\htdocs\barangay-reservation-system`
-2. Start Apache and MySQL from XAMPP.
-3. Create database `barangay` in phpMyAdmin.
-4. Import `database.sql`.
-5. Open `api/config.php` and verify DB credentials.
-6. Open:
-   `http://localhost/barangay-reservation-system/index.php`
+If email features are needed, also configure one mail mode:
 
-Expected local result:
-- Login page loads and demo accounts can sign in.
+- SMTP via `MAIL_DRIVER=smtp` and `SMTP_*`
+- Gmail API via `MAIL_DRIVER=gmail_api` and `GMAIL_API_*`
 
-## 3. Production Deployment Basics
+## 2. Database Setup
 
-1. Prepare Linux/Windows server with PHP and MySQL.
-2. Deploy project files to web root.
-3. Configure virtual host / site root.
-4. Import `database.sql` into production DB.
-5. Set production DB credentials in `api/config.php`.
-6. Configure SMTP/Gmail settings for forgot-password emails.
-7. Enable HTTPS with valid SSL certificate.
+For a fresh install:
 
-## 4. Security Requirements (Production)
+1. Create database `barangay`.
+2. Import `database.sql`.
 
-- Use HTTPS only.
-- Use strong database and SMTP passwords.
-- Restrict DB user permissions to required operations.
-- Keep session cookie secure and `httpOnly` under HTTPS.
-- Restrict CORS origin to known frontend host.
-- Disable debug output in production.
-- Regularly back up database and test restore process.
+For an older database:
 
-## 5. Post-Deployment Validation
+1. Back up the database first.
+2. Apply migration files in `migrations/` order.
+3. Start the app once so helper-based schema checks can add missing runtime columns if needed.
 
-Check these before go-live:
-- Admin and staff login works
-- Reservation create works
-- Approve/reject request works
-- Confirm cash payment works
-- User management (admin) works
-- Forgot-password email works
-- Reports and exports load successfully
+Current migration files:
 
-## 6. Maintenance Recommendations
+- `001_create_schema_migrations.sql`
+- `002_create_auth_login_throttle.sql`
+- `003_add_reservation_lookup_indexes.sql`
+- `004_add_facility_operating_rules.sql`
+- `005_add_facility_multi_day_rule.sql`
 
-- Keep daily DB backups.
-- Track config changes in deployment notes.
-- Rotate sensitive credentials regularly.
-- Re-run verification checklist after major updates.
+## 3. Web Server
 
-Last updated: 2026-03-07
+This repo is currently arranged for XAMPP/Apache under `htdocs`.
+
+Expected local URL:
+
+`http://localhost/barangay-reservation-system/index.php`
+
+## 4. Logs And Writable Paths
+
+- App logs go to `APP_LOG_DIR`
+- Ensure the configured log directory exists and is writable by PHP
+
+## 5. Optional Backup
+
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\backup-db.ps1
+```
+
+## 6. Post-Deploy Checks
+
+- Admin login works
+- Staff login works
+- Signup creates pending staff request
+- Admin approval works
+- Reservation creation works
+- Billing collection works
+- Reports load
+- Archive center loads
+- Forgot-password email works if mail is enabled
+
+## 7. Known Current-State Notes
+
+- The reports page still includes legacy `billing` status labels in some metrics.
+- The web archive page currently exposes restore UI for archived users and facilities only, even though reservation archive endpoints exist.
+- The Flutter client is present but its default entrypoint is still not wired to the production app shell.
+
+Last updated: 2026-03-15

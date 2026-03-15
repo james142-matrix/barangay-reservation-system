@@ -16,6 +16,24 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 let facilitiesCache = [];
+let hasAttemptedSubmit = false;
+const touchedFields = new Set();
+const FEEDBACK_FIELDS = [
+    'facility',
+    'eventDate',
+    'eventEndDate',
+    'startTime',
+    'endTime',
+    'eventType',
+    'expectedGuests',
+    'purposeOfEvent',
+    'clientName',
+    'clientAddress',
+    'clientEmail',
+    'contactPhone',
+    'medicalRoomDetails',
+    'downPaymentAmount'
+];
 const DEFAULT_EVENT_TYPES = [
     'Birthday Party',
     'Wedding',
@@ -31,13 +49,6 @@ function toIsoDate(dateObj) {
     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
     const d = String(dateObj.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
-}
-
-function addDaysIso(dateStr, days) {
-    const d = new Date(`${dateStr}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    d.setDate(d.getDate() + days);
-    return toIsoDate(d);
 }
 
 function parseTimeToMinutes(timeStr) {
@@ -56,6 +67,165 @@ function formatTime12Hour(timeValue) {
     hour = hour % 12;
     if (hour === 0) hour = 12;
     return `${hour}:${minute} ${suffix}`;
+}
+
+function formatDateForSummary(dateValue) {
+    if (!dateValue) return '';
+    const parsed = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return dateValue;
+    return parsed.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+    });
+}
+
+function normalizeBooleanFlag(value) {
+    if (typeof value === 'boolean') return value;
+    const lowered = String(value ?? '').trim().toLowerCase();
+    return lowered === '1' || lowered === 'true' || lowered === 'yes';
+}
+
+function getFacilityRuleConfig(facility) {
+    if (!facility) {
+        return {
+            openingTime: null,
+            closingTime: null,
+            allowsOvernight: false,
+            allowsAllDay: false,
+            allowsMultiDay: false,
+            maxDurationHours: null
+        };
+    }
+    const openingRaw = String(facility.openingTime || '').trim();
+    const closingRaw = String(facility.closingTime || '').trim();
+    const maxRaw = Number(facility.maxDurationHours);
+    return {
+        openingTime: openingRaw ? openingRaw.slice(0, 5) : null,
+        closingTime: closingRaw ? closingRaw.slice(0, 5) : null,
+        allowsOvernight: normalizeBooleanFlag(facility.allowsOvernight),
+        allowsAllDay: normalizeBooleanFlag(facility.allowsAllDay),
+        allowsMultiDay: normalizeBooleanFlag(facility.allowsMultiDay),
+        maxDurationHours: Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : null
+    };
+}
+
+function getFacilityRuleValidation(facility, eventDate, eventEndDate, startTime, endTime) {
+    const errors = {};
+    if (!facility || !eventDate || !eventEndDate || !startTime || !endTime) {
+        return { errors, valid: true };
+    }
+
+    const rules = getFacilityRuleConfig(facility);
+    const startDt = new Date(`${eventDate}T${startTime}`);
+    const endDt = new Date(`${eventEndDate}T${endTime}`);
+    if (Number.isNaN(startDt.getTime()) || Number.isNaN(endDt.getTime())) {
+        return { errors, valid: true };
+    }
+
+    const startMin = parseTimeToMinutes(startTime);
+    const endMin = parseTimeToMinutes(endTime);
+    const openingMin = parseTimeToMinutes(rules.openingTime);
+    const closingMin = parseTimeToMinutes(rules.closingTime);
+
+    if (!rules.allowsMultiDay && eventEndDate !== eventDate) {
+        errors.eventEndDate = 'This facility does not allow multi-day reservation.';
+    }
+
+    if (endDt <= startDt) {
+        errors.endTime = 'End time must be later than start time';
+    }
+
+    if (!rules.allowsOvernight && startMin != null && endMin != null && endMin <= startMin) {
+        errors.endTime = 'This facility does not allow overnight use.';
+    }
+
+    const durationHours = (endDt - startDt) / (1000 * 60 * 60);
+    if (!rules.allowsAllDay && durationHours >= 24) {
+        errors.endTime = 'This facility does not allow all-day reservation.';
+    }
+    if (rules.maxDurationHours != null && durationHours > rules.maxDurationHours) {
+        errors.endTime = 'This booking exceeds the maximum allowed duration for this facility.';
+    }
+
+    if (openingMin != null && closingMin != null && startMin != null && endMin != null) {
+        if (startMin < openingMin || startMin > closingMin || endMin < openingMin || endMin > closingMin) {
+            errors.startTime = 'Reservation must be within facility operating hours.';
+            errors.endTime = 'Reservation must be within facility operating hours.';
+        }
+    }
+
+    return { errors, valid: Object.keys(errors).length === 0 };
+}
+
+function renderFacilityRules(facility) {
+    const box = document.getElementById('facilityRulesBox');
+    const list = document.getElementById('facilityRulesList');
+    const hint = document.getElementById('facilityRulesHint');
+    const eventEndDateInput = document.getElementById('eventEndDate');
+    const eventDateInput = document.getElementById('eventDate');
+    const endDateHelper = document.getElementById('eventEndDateHelper');
+    const startTimeInput = document.getElementById('startTime');
+    const endTimeInput = document.getElementById('endTime');
+    if (!box || !list || !hint) return;
+
+    if (!facility) {
+        box.style.display = 'none';
+        list.innerHTML = '';
+        hint.textContent = '';
+        if (eventEndDateInput) eventEndDateInput.disabled = false;
+        if (startTimeInput) {
+            startTimeInput.removeAttribute('min');
+            startTimeInput.removeAttribute('max');
+        }
+        if (endTimeInput) {
+            endTimeInput.removeAttribute('min');
+            endTimeInput.removeAttribute('max');
+        }
+        if (endDateHelper) endDateHelper.textContent = 'For multi-day reservation, set a later end date.';
+        return;
+    }
+
+    const rules = getFacilityRuleConfig(facility);
+    const lines = [
+        `Open: ${rules.openingTime ? formatTime12Hour(rules.openingTime) : 'No set hours'}`,
+        `Close: ${rules.closingTime ? formatTime12Hour(rules.closingTime) : 'No set hours'}`,
+        `Overnight Use: ${rules.allowsOvernight ? 'Allowed' : 'Not Allowed'}`,
+        `All-Day Use: ${rules.allowsAllDay ? 'Allowed' : 'Not Allowed'}`,
+        `Multi-Day Reservation: ${rules.allowsMultiDay ? 'Allowed' : 'Not Allowed'}`,
+        `Maximum Duration: ${rules.maxDurationHours != null ? `${rules.maxDurationHours} hour(s)` : 'No max limit'}`
+    ];
+    list.innerHTML = lines.map(line => `<li>${escapeHtml(line)}</li>`).join('');
+    hint.textContent = rules.allowsMultiDay
+        ? 'End date can be later than start date when other rules are satisfied.'
+        : 'End date is locked to start date because multi-day reservation is not allowed.';
+    box.style.display = 'block';
+
+    if (eventEndDateInput && eventDateInput) {
+        if (!rules.allowsMultiDay) {
+            eventEndDateInput.disabled = true;
+            if (eventDateInput.value) {
+                eventEndDateInput.value = eventDateInput.value;
+            }
+            if (endDateHelper) endDateHelper.textContent = 'Multi-day reservation is not allowed for this facility.';
+        } else {
+            eventEndDateInput.disabled = false;
+            if (endDateHelper) endDateHelper.textContent = 'For multi-day reservation, set a later end date.';
+        }
+    }
+
+    if (startTimeInput) {
+        if (rules.openingTime) startTimeInput.min = rules.openingTime;
+        else startTimeInput.removeAttribute('min');
+        if (rules.closingTime) startTimeInput.max = rules.closingTime;
+        else startTimeInput.removeAttribute('max');
+    }
+    if (endTimeInput) {
+        if (rules.openingTime) endTimeInput.min = rules.openingTime;
+        else endTimeInput.removeAttribute('min');
+        if (rules.closingTime) endTimeInput.max = rules.closingTime;
+        else endTimeInput.removeAttribute('max');
+    }
 }
 
 async function loadFacilitiesDropdown() {
@@ -276,42 +446,73 @@ function getSelectedFacilityAddOns() {
 
 function setupEventListeners() {
     const facilitySelect = document.getElementById('facility');
+    const eventTypeInput = document.getElementById('eventType');
     const startTimeInput = document.getElementById('startTime');
     const endTimeInput = document.getElementById('endTime');
-    const startDateInput = document.getElementById('eventDate');
+    const eventDateInput = document.getElementById('eventDate');
     const endDateInput = document.getElementById('eventEndDate');
     const paymentOptionInput = document.getElementById('paymentOption');
+    const downPaymentInput = document.getElementById('downPaymentAmount');
     const clientNameInput = document.getElementById('clientName');
+    const clientAddressInput = document.getElementById('clientAddress');
+    const purposeInput = document.getElementById('purposeOfEvent');
     const clientEmailInput = document.getElementById('clientEmail');
-    const contactPersonInput = document.getElementById('contactPerson');
     const contactPhoneInput = document.getElementById('contactPhone');
     const addOnsContainer = document.getElementById('facilityAddOnsContainer');
     
     facilitySelect.addEventListener('change', updateFacilityPrice);
+    if (eventTypeInput) {
+        eventTypeInput.addEventListener('change', function() {
+            togglePurposeOfEventInput();
+            const result = validateReservationBasics();
+            applyReservationFeedback(result.errors);
+        });
+    }
     startTimeInput.addEventListener('change', function() {
-        autoAdjustEndDateForOvernight();
         calculateCost();
     });
     endTimeInput.addEventListener('change', function() {
-        autoAdjustEndDateForOvernight();
         calculateCost();
     });
     startTimeInput.addEventListener('input', updateTimeDisplays);
     endTimeInput.addEventListener('input', updateTimeDisplays);
     paymentOptionInput.addEventListener('change', toggleDownPaymentInput);
+    if (downPaymentInput) {
+        downPaymentInput.addEventListener('input', function() {
+            const parsed = parseFloat(String(this.value || '0'));
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                this.value = '0';
+            }
+            calculateCost();
+            const result = validateReservationBasics();
+            applyReservationFeedback(result.errors);
+        });
+        downPaymentInput.addEventListener('change', function() {
+            const parsed = Math.max(0, parseFloat(String(this.value || '0')) || 0);
+            this.value = parsed.toFixed(2).replace(/\.00$/, '');
+            calculateCost();
+            const result = validateReservationBasics();
+            applyReservationFeedback(result.errors);
+        });
+    }
     if (clientNameInput) {
         clientNameInput.addEventListener('input', function() {
             this.value = sanitizeNameInput(this.value);
         });
     }
+    if (purposeInput) {
+        purposeInput.addEventListener('input', function() {
+            this.value = String(this.value || '').replace(/[<>]/g, '');
+        });
+    }
+    if (clientAddressInput) {
+        clientAddressInput.addEventListener('input', function() {
+            this.value = String(this.value || '').replace(/[<>]/g, '');
+        });
+    }
     if (clientEmailInput) {
         clientEmailInput.addEventListener('input', function() {
             this.value = String(this.value || '').trim();
-        });
-    }
-    if (contactPersonInput) {
-        contactPersonInput.addEventListener('input', function() {
-            this.value = sanitizeNameInput(this.value);
         });
     }
     if (contactPhoneInput) {
@@ -333,25 +534,44 @@ function setupEventListeners() {
             calculateCost();
         });
     }
+    FEEDBACK_FIELDS.forEach((fieldId) => {
+        const el = document.getElementById(fieldId);
+        if (!el) return;
+        const evt = (el.tagName === 'SELECT' || el.type === 'date' || el.type === 'time') ? 'change' : 'input';
+        el.addEventListener(evt, function() {
+            touchedFields.add(fieldId);
+            const result = validateReservationBasics();
+            applyReservationFeedback(result.errors);
+        });
+    });
     
-    if (startDateInput && endDateInput) {
-        // ensure end date not before start date
-        startDateInput.addEventListener('change', function() {
-            if (endDateInput.value && endDateInput.value < this.value) {
+    if (eventDateInput) {
+        eventDateInput.addEventListener('change', function() {
+            if (endDateInput && (!endDateInput.value || endDateInput.disabled)) {
                 endDateInput.value = this.value;
             }
-            endDateInput.min = this.value;
-            autoAdjustEndDateForOvernight();
+            if (endDateInput) {
+                endDateInput.min = this.value;
+                if (endDateInput.value && endDateInput.value < this.value) {
+                    endDateInput.value = this.value;
+                }
+            }
+            const currentFacility = getFacilityFromCache(document.getElementById('facility')?.value || '');
+            renderFacilityRules(currentFacility);
             calculateCost();
         });
+        eventDateInput.min = toIsoDate(new Date());
+    }
+    if (endDateInput) {
         endDateInput.addEventListener('change', function() {
-            autoAdjustEndDateForOvernight();
             calculateCost();
         });
     }
 
     toggleDownPaymentInput();
+    togglePurposeOfEventInput();
     updateTimeDisplays();
+    applyReservationFeedback({});
 }
 
 function sanitizeNameInput(value) {
@@ -360,41 +580,13 @@ function sanitizeNameInput(value) {
 }
 
 function sanitizePhoneInput(value) {
-    return String(value || '').replace(/\D/g, '').slice(0, 15);
+    return String(value || '').replace(/\D/g, '').slice(0, 12);
 }
 
 function sanitizeIntegerInput(value) {
     const digits = String(value || '').replace(/\D/g, '');
     if (digits === '') return '';
     return String(parseInt(digits, 10));
-}
-
-function autoAdjustEndDateForOvernight() {
-    const startDateInput = document.getElementById('eventDate');
-    const endDateInput = document.getElementById('eventEndDate');
-    const startTimeInput = document.getElementById('startTime');
-    const endTimeInput = document.getElementById('endTime');
-    if (!startDateInput || !endDateInput || !startTimeInput || !endTimeInput) return;
-
-    const startDate = startDateInput.value;
-    let endDate = endDateInput.value;
-    const startTime = startTimeInput.value;
-    const endTime = endTimeInput.value;
-    if (!startDate || !endDate || !startTime || !endTime) return;
-
-    if (endDate < startDate) {
-        endDateInput.value = startDate;
-        endDate = startDate;
-    }
-
-    const startMin = parseTimeToMinutes(startTime);
-    const endMin = parseTimeToMinutes(endTime);
-    if (startMin == null || endMin == null) return;
-
-    // If same date and end time is earlier/equal, assume overnight and move to next day.
-    if (endDate === startDate && endMin <= startMin) {
-        endDateInput.value = addDaysIso(startDate, 1);
-    }
 }
 
 function configureNavigation(role) {
@@ -466,19 +658,52 @@ function updateTimeDisplays() {
 function toggleDownPaymentInput() {
     const paymentOption = document.getElementById('paymentOption').value;
     const downPaymentGroup = document.getElementById('downPaymentGroup');
+    const downPaymentInput = document.getElementById('downPaymentAmount');
     if (!downPaymentGroup) return;
-    downPaymentGroup.style.display = paymentOption === 'down_payment' ? 'block' : 'none';
+    const isDownPayment = paymentOption === 'down_payment';
+    downPaymentGroup.style.display = isDownPayment ? 'block' : 'none';
+    if (downPaymentInput) {
+        downPaymentInput.disabled = !isDownPayment;
+        if (!isDownPayment) downPaymentInput.value = '0';
+    }
+    calculateCost();
+    const result = validateReservationBasics();
+    applyReservationFeedback(result.errors);
+}
+
+function togglePurposeOfEventInput() {
+    const eventTypeInput = document.getElementById('eventType');
+    const purposeGroup = document.getElementById('purposeOfEventGroup');
+    const purposeInput = document.getElementById('purposeOfEvent');
+    if (!eventTypeInput || !purposeGroup || !purposeInput) return;
+
+    const isOther = String(eventTypeInput.value || '').trim().toLowerCase() === 'other';
+    purposeGroup.style.display = isOther ? 'block' : 'none';
+    purposeInput.required = isOther;
+
+    if (!isOther) {
+        purposeInput.value = '';
+    }
 }
 
 function updateFacilityPrice() {
     const facilityId = document.getElementById('facility').value;
+    const summaryFacility = document.getElementById('summaryFacility');
     if (!facilityId) {
         document.getElementById('facilityPrice').textContent = '₱0';
         document.getElementById('totalCost').textContent = '₱0';
+        const reservationFeeInput = document.getElementById('reservationFee');
+        const amountToPayInput = document.getElementById('amountToPay');
+        if (reservationFeeInput) reservationFeeInput.value = '₱0';
+        if (amountToPayInput) amountToPayInput.value = '₱0';
         populateEventTypeOptions(null);
+        togglePurposeOfEventInput();
         renderFacilityAddOns(null);
+        renderFacilityRules(null);
         const medicalRoomGroup = document.getElementById('medicalRoomDetailsGroup');
         if (medicalRoomGroup) medicalRoomGroup.style.display = 'none';
+        if (summaryFacility) summaryFacility.textContent = 'Not selected';
+        updateSummaryGuide();
         return;
     }
     
@@ -486,14 +711,55 @@ function updateFacilityPrice() {
     const facilityPrice = facility ? Number(facility.price || 0) : 0;
     if (facility) {
         document.getElementById('facilityPrice').textContent = `₱${facilityPrice}`;
+        if (summaryFacility) summaryFacility.textContent = `${facility.name} (₱${facilityPrice.toFixed(2)})`;
+        const reservationFeeInput = document.getElementById('reservationFee');
+        if (reservationFeeInput) reservationFeeInput.value = `₱${facilityPrice.toFixed(2)}`;
         populateEventTypeOptions(facility);
+        togglePurposeOfEventInput();
         renderFacilityAddOns(facility);
+        renderFacilityRules(facility);
         const medicalRoomGroup = document.getElementById('medicalRoomDetailsGroup');
         if (medicalRoomGroup) {
             medicalRoomGroup.style.display = String(facility.name || '').toLowerCase() === 'medical room' ? 'block' : 'none';
         }
         calculateCost();
     }
+}
+
+function updateSummaryGuide() {
+    const facility = getFacilityFromCache(document.getElementById('facility')?.value || '');
+    const startDate = String(document.getElementById('eventDate')?.value || '').trim();
+    const endDate = String(document.getElementById('eventEndDate')?.value || '').trim();
+    const startTime = String(document.getElementById('startTime')?.value || '').trim();
+    const endTime = String(document.getElementById('endTime')?.value || '').trim();
+    const summaryGuide = document.getElementById('summaryGuide');
+    const summarySchedule = document.getElementById('summarySchedule');
+
+    if (summarySchedule) {
+        if (startDate && endDate && startTime && endTime) {
+            const startLabel = `${formatDateForSummary(startDate)} ${formatTime12Hour(startTime)}`;
+            const endLabel = `${formatDateForSummary(endDate)} ${formatTime12Hour(endTime)}`;
+            summarySchedule.textContent = startDate === endDate
+                ? `${formatDateForSummary(startDate)} • ${formatTime12Hour(startTime)} - ${formatTime12Hour(endTime)}`
+                : `${startLabel} → ${endLabel}`;
+        } else {
+            summarySchedule.textContent = 'No date and time selected yet';
+        }
+    }
+
+    if (!summaryGuide) return;
+
+    if (!facility) {
+        summaryGuide.innerHTML = '<strong>Next step:</strong> Select a facility, event date, and time range to calculate the reservation fee.';
+        return;
+    }
+
+    if (!startDate || !endDate || !startTime || !endTime) {
+        summaryGuide.innerHTML = '<strong>Almost there:</strong> Choose the reservation date and time to preview duration, fee, and amount to pay.';
+        return;
+    }
+
+    summaryGuide.innerHTML = '<strong>Ready:</strong> Review the computed fee and payment amount, then submit the reservation request when all details are correct.';
 }
 
 function calculateCost() {
@@ -503,10 +769,15 @@ function calculateCost() {
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
     const selectedAddOns = getSelectedFacilityAddOns();
+    const paymentOption = String(document.getElementById('paymentOption')?.value || 'full');
+    const downPaymentAmount = Math.max(0, parseFloat(String(document.getElementById('downPaymentAmount')?.value || '0')) || 0);
     
     if (!facilityId || !startDate || !endDate || !startTime || !endTime) {
         document.getElementById('totalCost').textContent = '₱0';
         document.getElementById('duration').textContent = '-';
+        const amountToPayInput = document.getElementById('amountToPay');
+        if (amountToPayInput) amountToPayInput.value = '₱0';
+        updateSummaryGuide();
         return;
     }
     
@@ -531,28 +802,173 @@ function calculateCost() {
     const addOnCost = selectedAddOns.reduce((sum, item) => sum + (item.price * item.qty), 0);
     const totalCost = baseCost + addOnCost;
     document.getElementById('totalCost').textContent = `₱${totalCost.toFixed(2)}`;
+    const reservationFeeInput = document.getElementById('reservationFee');
+    if (reservationFeeInput) reservationFeeInput.value = `₱${totalCost.toFixed(2)}`;
+    const amountToPayInput = document.getElementById('amountToPay');
+    if (amountToPayInput) {
+        const amountToPay = paymentOption === 'down_payment' ? Math.min(downPaymentAmount, totalCost) : totalCost;
+        amountToPayInput.value = `₱${Math.max(0, amountToPay).toFixed(2)}`;
+    }
+    updateSummaryGuide();
+}
+
+function getFieldFeedbackElement(inputEl) {
+    if (!inputEl || !inputEl.parentElement) return null;
+    let feedback = inputEl.parentElement.querySelector('.field-feedback');
+    if (!feedback) {
+        feedback = document.createElement('small');
+        feedback.className = 'field-feedback';
+        feedback.setAttribute('aria-live', 'polite');
+        inputEl.parentElement.appendChild(feedback);
+    }
+    return feedback;
+}
+
+function setFieldFeedback(fieldId, message) {
+    const input = document.getElementById(fieldId);
+    if (!input) return;
+    const feedback = getFieldFeedbackElement(input);
+    const text = String(message || '').trim();
+    if (text) {
+        input.classList.remove('ux-input-ok');
+        input.classList.add('ux-input-error');
+        if (feedback) feedback.textContent = text;
+    } else {
+        input.classList.remove('ux-input-error');
+        const hasValue = input.type === 'checkbox' ? !!input.checked : String(input.value || '').trim() !== '';
+        if (hasValue) {
+            input.classList.add('ux-input-ok');
+        } else {
+            input.classList.remove('ux-input-ok');
+        }
+        if (feedback) feedback.textContent = '';
+    }
+}
+
+function applyReservationFeedback(errors) {
+    const map = errors || {};
+    const showAll = hasAttemptedSubmit;
+    FEEDBACK_FIELDS.forEach((fieldId) => {
+        const shouldShow = showAll || touchedFields.has(fieldId);
+        setFieldFeedback(fieldId, shouldShow ? (map[fieldId] || '') : '');
+    });
+}
+
+function validateReservationBasics() {
+    const errors = {};
+    const facilityId = String(document.getElementById('facility')?.value || '').trim();
+    const eventDate = String(document.getElementById('eventDate')?.value || '').trim();
+    const eventEndDate = String(document.getElementById('eventEndDate')?.value || '').trim();
+    const startTime = String(document.getElementById('startTime')?.value || '').trim();
+    const endTime = String(document.getElementById('endTime')?.value || '').trim();
+    const eventType = String(document.getElementById('eventType')?.value || '').trim();
+    const expectedGuestsRaw = String(document.getElementById('expectedGuests')?.value || '').trim();
+    const purposeOfEvent = String(document.getElementById('purposeOfEvent')?.value || '').trim();
+    const clientName = String(document.getElementById('clientName')?.value || '').trim();
+    const clientAddress = String(document.getElementById('clientAddress')?.value || '').trim();
+    const clientEmail = String(document.getElementById('clientEmail')?.value || '').trim();
+    const contactPhone = String(document.getElementById('contactPhone')?.value || '').trim();
+    const paymentOption = String(document.getElementById('paymentOption')?.value || 'full').trim();
+    const downPaymentAmount = Math.max(0, parseFloat(String(document.getElementById('downPaymentAmount')?.value || '0')) || 0);
+    const medicalRoomDetails = String(document.getElementById('medicalRoomDetails')?.value || '').trim();
+    const facility = facilityId ? getFacilityFromCache(facilityId) : null;
+    const totalCostRaw = String(document.getElementById('totalCost')?.textContent || '₱0');
+    const reservationFee = Math.max(0, parseFloat(totalCostRaw.replace(/[^0-9.]/g, '')) || 0);
+
+    if (!facilityId) errors.facility = 'Please choose a facility';
+    if (!eventDate) errors.eventDate = 'Start date is required';
+    if (!eventEndDate) errors.eventEndDate = 'End date is required';
+    if (eventDate && eventEndDate && new Date(eventEndDate) < new Date(eventDate)) {
+        errors.eventEndDate = 'End date cannot be before start date';
+    }
+    if (!startTime) errors.startTime = 'Start time is required';
+    if (!endTime) errors.endTime = 'End time is required';
+    if (eventDate && eventEndDate && startTime && endTime) {
+        const startDt = new Date(`${eventDate}T${startTime}`);
+        const endDt = new Date(`${eventEndDate}T${endTime}`);
+        if (endDt <= startDt) {
+            errors.endTime = 'End time must be later than start time';
+        }
+        const ruleResult = getFacilityRuleValidation(facility, eventDate, eventEndDate, startTime, endTime);
+        Object.assign(errors, ruleResult.errors);
+    }
+    if (!eventType) errors.eventType = 'Please select event type';
+    if (eventType.toLowerCase() === 'other') {
+        if (purposeOfEvent.length < 3) {
+            errors.purposeOfEvent = 'Please specify the event purpose for Other';
+        }
+    } else if (purposeOfEvent !== '' && purposeOfEvent.length < 3) {
+        errors.purposeOfEvent = 'If provided, enter at least 3 characters';
+    }
+    const expectedGuests = parseInt(expectedGuestsRaw, 10);
+    if (!expectedGuestsRaw || !Number.isFinite(expectedGuests) || expectedGuests < 1) {
+        errors.expectedGuests = 'Participants must be at least 1';
+    } else if (facility && expectedGuests > Number(facility.capacity || 0)) {
+        errors.expectedGuests = `Max ${facility.capacity} for this facility`;
+    }
+    if (clientName.length < 3 || !/^[A-Za-z\s.'-]+$/.test(clientName)) {
+        errors.clientName = 'Enter a valid client name';
+    }
+    if (clientAddress.length < 8 || !/[A-Za-z]/.test(clientAddress)) {
+        errors.clientAddress = 'Enter a complete address with barangay/city details';
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+        errors.clientEmail = 'Enter a valid email';
+    }
+    if (!/^(?:09\d{9}|639\d{9})$/.test(contactPhone)) {
+        errors.contactPhone = 'Use a valid PH mobile number';
+    }
+    if (facility && String(facility.name || '').toLowerCase() === 'medical room' && !medicalRoomDetails) {
+        errors.medicalRoomDetails = 'Please specify room/need';
+    }
+    if (paymentOption === 'down_payment' && downPaymentAmount <= 0) {
+        errors.downPaymentAmount = 'Down payment must be greater than 0';
+    }
+    if (paymentOption === 'down_payment' && reservationFee > 0 && downPaymentAmount > reservationFee) {
+        errors.downPaymentAmount = 'Down payment cannot be more than reservation fee';
+    }
+
+    const firstField = FEEDBACK_FIELDS.find((id) => !!errors[id]) || null;
+    return { ok: firstField === null, errors, firstField };
 }
 
 async function submitReservation(event) {
     event.preventDefault();
+    hasAttemptedSubmit = true;
     
     const user = getLoggedInUser();
     if (!user || (user.role !== 'admin' && user.role !== 'barangay_staff')) {
         showToast('Only staff/admin can submit reservations from this page.', 'danger');
         return;
     }
+    const basicValidation = validateReservationBasics();
+    applyReservationFeedback(basicValidation.errors);
+    if (!basicValidation.ok) {
+        if (basicValidation.firstField) {
+            const firstEl = document.getElementById(basicValidation.firstField);
+            if (firstEl && typeof firstEl.focus === 'function') firstEl.focus();
+            showToast(basicValidation.errors[basicValidation.firstField], 'warning');
+        } else {
+            showToast('Please review the highlighted fields', 'warning');
+        }
+        return;
+    }
+
     const facilityId = document.getElementById('facility').value;
     const eventDate = document.getElementById('eventDate').value; // start date
-    let eventEndDate = document.getElementById('eventEndDate').value; // end date
+    const eventEndDate = document.getElementById('eventEndDate').value;
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
     const eventType = document.getElementById('eventType').value;
     const expectedGuests = parseInt(document.getElementById('expectedGuests').value);
-    const eventDescription = document.getElementById('eventDescription').value || '';
+    const purposeOfEvent = (document.getElementById('purposeOfEvent').value || '').trim();
+    const additionalNotes = document.getElementById('eventDescription').value || '';
     const clientName = document.getElementById('clientName').value.trim();
+    const clientAddress = document.getElementById('clientAddress').value.trim();
+    const organization = (document.getElementById('organization')?.value || '').trim();
     const clientEmail = document.getElementById('clientEmail').value.trim();
-    const contactPerson = document.getElementById('contactPerson').value.trim();
     const contactPhone = document.getElementById('contactPhone').value.trim();
+    const contactPerson = clientName;
     const selectedAddOns = getSelectedFacilityAddOns();
     const medicalRoomDetails = (document.getElementById('medicalRoomDetails').value || '').trim();
     const paymentOption = document.getElementById('paymentOption').value;
@@ -571,21 +987,12 @@ async function submitReservation(event) {
         showToast('Please enter a valid client email address', 'warning');
         return;
     }
-    
+
     if (new Date(eventEndDate) < new Date(eventDate)) {
-        showToast('End date cannot be before start date', 'warning');
+        showToast('Reservation end date cannot be before start date', 'warning');
         return;
     }
-
-    // Handle overnight reservation if same day but end time is earlier/equal.
-    const startMin = parseTimeToMinutes(startTime);
-    const endMin = parseTimeToMinutes(endTime);
-    if (eventEndDate === eventDate && startMin != null && endMin != null && endMin <= startMin) {
-        eventEndDate = addDaysIso(eventDate, 1);
-        const endDateInput = document.getElementById('eventEndDate');
-        if (endDateInput) endDateInput.value = eventEndDate;
-    }
-
+    
     const startDtCheck = new Date(`${eventDate}T${startTime}`);
     const endDtCheck = new Date(`${eventEndDate}T${endTime}`);
     if (endDtCheck <= startDtCheck) {
@@ -602,6 +1009,12 @@ async function submitReservation(event) {
         showToast('Selected facility is currently unavailable for reservation', 'warning');
         return;
     }
+    const ruleResult = getFacilityRuleValidation(facility, eventDate, eventEndDate, startTime, endTime);
+    if (!ruleResult.valid) {
+        const firstMessage = Object.values(ruleResult.errors)[0] || 'Please adjust reservation schedule based on facility rules.';
+        showToast(firstMessage, 'warning');
+        return;
+    }
     const allowedEventTypes = getEventTypesForFacility(facility);
     if (eventType && !allowedEventTypes.includes(eventType)) {
         showToast('Selected event type is not allowed for this facility', 'warning');
@@ -612,12 +1025,12 @@ async function submitReservation(event) {
         showToast(`Expected guests (${expectedGuests}) exceeds facility capacity (${facility.capacity})`, 'warning');
         return;
     }
-    if (!/^[A-Za-z\s.'-]+$/.test(contactPerson)) {
-        showToast('Contact person should contain letters only', 'warning');
+    if (!/^(?:09\d{9}|639\d{9})$/.test(contactPhone)) {
+        showToast('Please enter a valid PH mobile number', 'warning');
         return;
     }
-    if (!/^\d{7,15}$/.test(contactPhone)) {
-        showToast('Contact phone should contain numbers only (7-15 digits)', 'warning');
+    if (clientAddress.length < 8 || !/[A-Za-z]/.test(clientAddress)) {
+        showToast('Please enter a complete address with barangay/city details', 'warning');
         return;
     }
     if (String(facility.name || '').toLowerCase() === 'medical room' && !medicalRoomDetails) {
@@ -628,7 +1041,6 @@ async function submitReservation(event) {
         showToast('Enter a valid down payment amount', 'warning');
         return;
     }
-    
     // Check for conflicts with existing reservations
     // compute datetime ranges for new reservation
     const startDt = new Date(`${eventDate}T${startTime}`);
@@ -637,7 +1049,7 @@ async function submitReservation(event) {
     const existingReservations = await window.api.getAllReservations();
     const hasConflict = existingReservations.some(r => {
         const status = String(r.status || '').toLowerCase();
-        if (status !== 'pending' && status !== 'approved') return false;
+        if (status !== 'pending' && status !== 'billing') return false;
         // compare loosely because facilityId may be string or number
         if (r.facilityId != facilityId) return false;
 
@@ -659,10 +1071,22 @@ async function submitReservation(event) {
         return;
     }
     
+    const eventDescriptionParts = [
+        purposeOfEvent ? `Purpose of Event: ${purposeOfEvent}` : '',
+        clientAddress ? `Client Address: ${clientAddress}` : '',
+        organization ? `Organization: ${organization}` : '',
+        additionalNotes ? `Additional Notes: ${additionalNotes}` : ''
+    ].filter(Boolean);
+    const eventDescription = eventDescriptionParts.join('\n');
+
     // compute total cost before submitting
     const durationHoursCalc = (endDtCheck - startDtCheck) / (1000 * 60 * 60);
     const addOnCost = selectedAddOns.reduce((sum, item) => sum + (item.price * item.qty), 0);
     const totalCost = (facility.price * durationHoursCalc) + addOnCost;
+    if (paymentOption === 'down_payment' && downPaymentAmount > totalCost) {
+        showToast('Down payment cannot be more than reservation fee', 'warning');
+        return;
+    }
 
     // Create reservation via backend API if possible
     try {
@@ -680,6 +1104,8 @@ async function submitReservation(event) {
             eventDescription: eventDescription,
             contactPerson: contactPerson,
             contactPhone: contactPhone,
+            clientAddress: clientAddress,
+            organization: organization,
             addOns: selectedAddOns.map(item => ({ id: item.id, qty: item.qty })),
             medicalRoomDetails: medicalRoomDetails || null,
             paymentOption: paymentOption,
@@ -687,7 +1113,7 @@ async function submitReservation(event) {
             totalCost: totalCost
         });
 
-        showToast('Reservation submitted successfully! Awaiting approval.', 'success');
+        showToast('Reservation submitted successfully.', 'success');
         
         setTimeout(() => {
             window.location.href = user.role === 'admin'
@@ -698,6 +1124,3 @@ async function submitReservation(event) {
         showToast('Error creating reservation: ' + error.message, 'danger');
     }
 }
-
-
-

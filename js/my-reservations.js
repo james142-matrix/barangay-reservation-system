@@ -21,6 +21,11 @@ let currentReservations = [];
 let facilitiesById = new Map();
 let usersByUsername = new Map();
 
+function getReserveUrlByRole() {
+    const user = getLoggedInUser();
+    return user && user.role === 'admin' ? 'admin-reserve.php' : 'barangay-staff-reserve.php';
+}
+
 function formatTime12Hour(timeValue) {
     if (!timeValue || !timeValue.includes(':')) return '-';
     const [hourStr, minuteStr] = timeValue.split(':');
@@ -84,7 +89,7 @@ function displayReservations(reservations) {
                 <div class="empty-state-icon">📋</div>
                 <h3>No Reservations Yet</h3>
                 <p>You haven't created any reservations yet.</p>
-                <a href="reserve.php" class="btn btn-primary">Create Your First Reservation</a>
+                <a href="${getReserveUrlByRole()}" class="btn btn-primary">Create Your First Reservation</a>
             </div>
         `;
         return;

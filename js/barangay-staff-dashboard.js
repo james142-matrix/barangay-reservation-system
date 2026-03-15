@@ -1,4 +1,4 @@
-// Initialize barangay staff dashboard
+// Initialize admin dashboard
 document.addEventListener('DOMContentLoaded', function() {
     if (!checkAuth('barangay_staff')) return;
     bindNotificationToggle();
@@ -54,52 +54,57 @@ function normalizeReservation(raw) {
         eventStartDate: raw.eventStartDate || raw.event_start_date || raw.eventDate || raw.event_date,
         eventEndDate: raw.eventEndDate || raw.event_end_date,
         paymentStatus: raw.paymentStatus || raw.payment_status || 'pending',
+        paymentDate: raw.paymentDate || raw.payment_date || null,
+        paymentOption: raw.paymentOption || raw.payment_option || 'full',
         createdAt: raw.createdAt || raw.created_at || null,
         approvedAt: raw.approvedAt || raw.approved_at || null,
         rejectedAt: raw.rejectedAt || raw.rejected_at || null
     };
 }
 
-async function loadDashboard() {
-    // Display user greeting
-    const user = getLoggedInUser();
-    if (user) {
-        document.getElementById('user-greeting').textContent = `Welcome, ${user.fullname}`;
-    }
+function isActiveReservationStatus(status) {
+    return ['pending', 'completed'].includes(String(status || '').toLowerCase());
+}
 
+function getStatusBadgeClass(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'pending' || value === 'billing') return 'pending';
+    if (value === 'completed') return 'completed';
+    return 'rejected';
+}
+
+function getStatusLabel(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'pending' || value === 'billing') return 'Pending';
+    if (value === 'completed') return 'Completed';
+    if (value === 'cancelled') return 'Cancelled';
+    return value || 'Unknown';
+}
+
+async function loadDashboard() {
     const [allReservationsRaw, facilities, users] = await Promise.all([
         window.api.getAllReservations(),
         window.api.getFacilities(),
         window.api.getUsers()
     ]);
-    const allReservations = (allReservationsRaw || []).map(normalizeReservation);
+    const allReservations = (Array.isArray(allReservationsRaw) ? allReservationsRaw : []).map(normalizeReservation);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const next7 = new Date(today);
     next7.setDate(next7.getDate() + 7);
 
-    const unpaidApprovedCount = allReservations.filter(r =>
-        r.status === 'approved' &&
-        r.paymentStatus !== 'paid' &&
-        r.paymentStatus !== 'cash'
-    ).length;
-
     const stats = {
         total: allReservations.length,
         pending: allReservations.filter(r => r.status === 'pending').length,
-        approved: allReservations.filter(r => r.status === 'approved').length,
-        rejected: allReservations.filter(r => r.status === 'rejected').length,
+        rejected: allReservations.filter(r => r.status === 'cancelled').length,
         completed: allReservations.filter(r => r.status === 'completed').length,
-        unpaidApproved: unpaidApprovedCount
     };
     
     // Update stat cards
     setTextIfExists('stat-total', stats.total);
     setTextIfExists('stat-pending', stats.pending);
-    setTextIfExists('stat-approved', stats.approved);
     setTextIfExists('stat-rejected', stats.rejected);
     setTextIfExists('stat-completed', stats.completed);
-    setTextIfExists('stat-unpaid-approved', stats.unpaidApproved);
     
     // Display pending requests
     displayPendingRequests(allReservations, facilities, users);
@@ -108,9 +113,11 @@ async function loadDashboard() {
 }
 
 async function displayPendingRequests(allReservationsInput, facilitiesInput, usersInput) {
-    const allReservations = Array.isArray(allReservationsInput)
-        ? allReservationsInput
-        : (await window.api.getAllReservations()).map(normalizeReservation);
+    let allReservations = Array.isArray(allReservationsInput) ? allReservationsInput : null;
+    if (!allReservations) {
+        const fallbackReservationsRaw = await window.api.getAllReservations();
+        allReservations = (Array.isArray(fallbackReservationsRaw) ? fallbackReservationsRaw : []).map(normalizeReservation);
+    }
     const facilities = Array.isArray(facilitiesInput) ? facilitiesInput : await window.api.getFacilities();
     const users = Array.isArray(usersInput) ? usersInput : await window.api.getUsers();
     const facilityMap = new Map((facilities || []).map(f => [String(f.id), f]));
@@ -127,7 +134,7 @@ async function displayPendingRequests(allReservationsInput, facilitiesInput, use
             <div class="empty-state" style="margin: 0;">
                 <div class="empty-state-icon">✓</div>
                 <h3>No Pending Requests</h3>
-                <p>All reservation requests have been reviewed.</p>
+                <p>All pending reservation requests have been reviewed.</p>
             </div>
         `;
         return;
@@ -162,7 +169,7 @@ async function displayPendingRequests(allReservationsInput, facilitiesInput, use
                 <td>${paymentLabel}</td>
                 <td>${submittedDate}</td>
                 <td>
-                    <a href="barangay-staff-requests.php" class="btn btn-small btn-primary">Review</a>
+                    <a href="admin-requests.php" class="btn btn-small btn-primary">Review</a>
                 </td>
             </tr>
         `;
@@ -184,7 +191,7 @@ function displayUpcomingEvents(allReservations, facilities, users, today, next7)
     const userMap = new Map((users || []).map(u => [u.username, u]));
 
     const upcoming = (allReservations || [])
-        .filter(r => r.status === 'approved' || r.status === 'completed')
+        .filter(r => r.status === 'completed')
         .filter(r => {
             const startDate = toDateValue(r.eventStartDate || r.eventDate);
             return startDate && startDate >= today && startDate <= next7;
@@ -197,7 +204,7 @@ function displayUpcomingEvents(allReservations, facilities, users, today, next7)
             <div class="empty-state" style="margin: 0;">
                 <div class="empty-state-icon">📅</div>
                 <h3>No Upcoming Events</h3>
-                <p>No approved events scheduled in the next 7 days.</p>
+                <p>No completed reservations scheduled in the next 7 days.</p>
             </div>
         `;
         return;
@@ -220,7 +227,7 @@ function displayUpcomingEvents(allReservations, facilities, users, today, next7)
     upcoming.forEach(r => {
         const facility = facilityMap.get(String(r.facilityId));
         const user = userMap.get(r.username);
-        const statusClass = r.status === 'completed' ? 'completed' : 'approved';
+        const statusClass = getStatusBadgeClass(r.status);
 
         html += `
             <tr>
@@ -228,7 +235,7 @@ function displayUpcomingEvents(allReservations, facilities, users, today, next7)
                 <td>${facility ? facility.name : 'Unknown'}</td>
                 <td>${user ? user.fullname : r.username}</td>
                 <td>${formatTimeRange(r.startTime, r.endTime)}</td>
-                <td><span class="badge ${statusClass}">${r.status}</span></td>
+                <td><span class="badge ${statusClass}">${getStatusLabel(r.status)}</span></td>
             </tr>
         `;
     });
@@ -248,10 +255,10 @@ function displayRecentDecisions(allReservations, facilities, users) {
     const userMap = new Map((users || []).map(u => [u.username, u]));
 
     const decisions = (allReservations || [])
-        .filter(r => r.status === 'approved' || r.status === 'rejected' || r.status === 'completed')
+        .filter(r => ['completed', 'cancelled'].includes(String(r.status || '').toLowerCase()))
         .sort((a, b) => {
-            const aDate = new Date(a.approvedAt || a.rejectedAt || a.createdAt || 0);
-            const bDate = new Date(b.approvedAt || b.rejectedAt || b.createdAt || 0);
+            const aDate = new Date(a.paymentDate || a.approvedAt || a.rejectedAt || a.createdAt || 0);
+            const bDate = new Date(b.paymentDate || b.approvedAt || b.rejectedAt || b.createdAt || 0);
             return bDate - aDate;
         })
         .slice(0, 8);
@@ -261,7 +268,7 @@ function displayRecentDecisions(allReservations, facilities, users) {
             <div class="empty-state" style="margin: 0;">
                 <div class="empty-state-icon">📝</div>
                 <h3>No Recent Decisions</h3>
-                <p>Approved/rejected/completed decisions will appear here.</p>
+                <p>Completed and cancelled reservations will appear here.</p>
             </div>
         `;
         return;
@@ -285,17 +292,15 @@ function displayRecentDecisions(allReservations, facilities, users) {
     decisions.forEach(r => {
         const facility = facilityMap.get(String(r.facilityId));
         const user = userMap.get(r.username);
-        const statusClass = r.status === 'approved'
-            ? 'approved'
-            : (r.status === 'completed' ? 'completed' : 'rejected');
-        const updatedAt = r.approvedAt || r.rejectedAt || r.createdAt;
+        const statusClass = getStatusBadgeClass(r.status);
+        const updatedAt = r.paymentDate || r.approvedAt || r.rejectedAt || r.createdAt;
 
         html += `
             <tr>
                 <td>${user ? user.fullname : r.username}</td>
                 <td>${facility ? facility.name : 'Unknown'}</td>
                 <td>${formatDate(r.eventStartDate || r.eventDate).split(',')[0]}</td>
-                <td><span class="badge ${statusClass}">${r.status}</span></td>
+                <td><span class="badge ${statusClass}">${getStatusLabel(r.status)}</span></td>
                 <td>${r.paymentStatus || 'pending'}</td>
                 <td>${formatDateShort(updatedAt)}</td>
             </tr>
@@ -323,12 +328,7 @@ function updateNotificationBadge(username) {
     const unreadCount = getUnreadNotificationsCount(username);
     const badge = document.getElementById('notificationBadge');
     if (!badge) return;
-    if (unreadCount > 0) {
-        badge.textContent = unreadCount;
-        badge.style.display = 'inline-block';
-    } else {
-        badge.style.display = 'none';
-    }
+    badge.textContent = String(unreadCount);
 }
 
 function toggleNotifications() {

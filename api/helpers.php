@@ -4,6 +4,29 @@ function send_json($data, int $status = 200): void
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
+    if ($status >= 400) {
+        $payload = is_array($data) ? $data : ['error' => (string)$data];
+        if (!isset($payload['error']) || trim((string)$payload['error']) === '') {
+            $payload['error'] = 'Request failed';
+        }
+        if (!isset($payload['success'])) {
+            $payload['success'] = false;
+        }
+        if (!isset($payload['status'])) {
+            $payload['status'] = $status;
+        }
+        echo json_encode($payload);
+        exit;
+    }
+
+    if (is_array($data)) {
+        $isList = function_exists('array_is_list')
+            ? array_is_list($data)
+            : (count($data) === 0 || array_keys($data) === range(0, count($data) - 1));
+        if (!$isList && !isset($data['success'])) {
+            $data['success'] = true;
+        }
+    }
     echo json_encode($data);
     exit;
 }
@@ -26,6 +49,68 @@ function normalize_role($role): string
         return $value;
     }
     return 'resident';
+}
+
+function validate_username(string $username): ?string
+{
+    if ($username === '') {
+        return 'Username is required';
+    }
+    if (!preg_match('/^[A-Za-z0-9_.-]{3,50}$/', $username)) {
+        return 'Username must be 3-50 characters and use letters, numbers, dot, underscore, or hyphen';
+    }
+    return null;
+}
+
+function validate_email_value(string $email): ?string
+{
+    if ($email === '') {
+        return 'Email is required';
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return 'Invalid email format';
+    }
+    return null;
+}
+
+function email_domain_exists(string $email): bool
+{
+    $parts = explode('@', strtolower(trim($email)));
+    $domain = trim((string)end($parts));
+    if ($domain === '' || strpos($domain, '.') === false) {
+        return false;
+    }
+
+    if (function_exists('checkdnsrr')) {
+        foreach (['MX', 'A', 'AAAA'] as $recordType) {
+            if (@checkdnsrr($domain, $recordType)) {
+                return true;
+            }
+        }
+    }
+
+    if (function_exists('dns_get_record')) {
+        $records = @dns_get_record($domain, DNS_MX | DNS_A | DNS_AAAA);
+        if (is_array($records) && count($records) > 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function validate_fullname(string $fullname): ?string
+{
+    if ($fullname === '') {
+        return 'Full name is required';
+    }
+    if (strlen($fullname) < 3 || strlen($fullname) > 100) {
+        return 'Full name must be 3-100 characters';
+    }
+    if (!preg_match("/^[A-Za-z\\s.'-]+$/", $fullname)) {
+        return 'Full name must contain letters and basic punctuation only';
+    }
+    return null;
 }
 
 function sanitize_user(array $row): array
@@ -120,8 +205,71 @@ function validate_contact_fields(string $contactPerson, string $contactPhone): ?
     if ($contactPerson !== '' && !preg_match("/^[A-Za-z\s.'-]+$/", $contactPerson)) {
         return 'Contact person must contain letters only';
     }
-    if ($contactPhone !== '' && !preg_match('/^\d{7,15}$/', $contactPhone)) {
-        return 'Contact phone must contain numbers only (7-15 digits)';
+    if ($contactPhone !== '' && !preg_match('/^(?:09\d{9}|639\d{9})$/', $contactPhone)) {
+        return 'Contact phone must be a valid PH mobile number';
+    }
+    return null;
+}
+
+function validate_reservation_address(string $address): ?string
+{
+    $trimmed = trim($address);
+    if ($trimmed === '') {
+        return 'Client address is required';
+    }
+    if (strlen($trimmed) < 8 || strlen($trimmed) > 180) {
+        return 'Client address must be 8-180 characters';
+    }
+    if (!preg_match('/[A-Za-z]/', $trimmed)) {
+        return 'Client address must include place details';
+    }
+    if (preg_match('/[<>]/', $trimmed)) {
+        return 'Client address contains invalid characters';
+    }
+    return null;
+}
+
+function validate_optional_organization(string $organization): ?string
+{
+    $trimmed = trim($organization);
+    if ($trimmed === '') {
+        return null;
+    }
+    if (strlen($trimmed) > 120) {
+        return 'Organization must be 120 characters or fewer';
+    }
+    if (preg_match('/[<>]/', $trimmed)) {
+        return 'Organization contains invalid characters';
+    }
+    return null;
+}
+
+function validate_optional_user_phone(string $phone): ?string
+{
+    $trimmed = trim($phone);
+    if ($trimmed === '') {
+        return null;
+    }
+    if (!preg_match('/^(?:09\d{9}|639\d{9})$/', $trimmed)) {
+        return 'Phone must be a valid PH mobile number';
+    }
+    return null;
+}
+
+function validate_optional_user_address(string $address): ?string
+{
+    $trimmed = trim($address);
+    if ($trimmed === '') {
+        return null;
+    }
+    if (strlen($trimmed) < 8 || strlen($trimmed) > 180) {
+        return 'Address must be 8-180 characters';
+    }
+    if (!preg_match('/[A-Za-z]/', $trimmed)) {
+        return 'Address must include real place details';
+    }
+    if (preg_match('/[<>]/', $trimmed)) {
+        return 'Address contains invalid characters';
     }
     return null;
 }
@@ -135,6 +283,19 @@ function parse_count($value): int
 function normalize_payment_option($value): string
 {
     return strtolower((string)$value) === 'down_payment' ? 'down_payment' : 'full';
+}
+
+function normalize_reservation_status_value($status, $paymentStatus = null): string
+{
+    $value = strtolower(trim((string)$status));
+    if (in_array($value, ['pending_review', 'pending'], true)) return 'pending';
+    if (in_array($value, ['approved', 'ready_for_billing', 'billing'], true)) return 'pending';
+    if (in_array($value, ['confirmed', 'completed'], true)) return 'completed';
+    if (in_array($value, ['rejected', 'cancelled'], true)) return 'cancelled';
+    if (in_array($value, ['pending', 'completed', 'cancelled'], true)) {
+        return $value;
+    }
+    return 'pending';
 }
 
 function default_event_types_for_facility(string $facilityName = ''): array
@@ -307,6 +468,27 @@ function default_add_ons_for_facility(string $facilityName = ''): array
     return [];
 }
 
+function default_icon_for_facility(string $facilityName = ''): string
+{
+    $name = strtolower(trim($facilityName));
+    if ($name === 'community hall') return '🏛️';
+    if ($name === 'sports complex') return '🏀';
+    if ($name === 'cultural center') return '🎭';
+    if ($name === 'library & learning center') return '📚';
+    if ($name === 'medical room') return '🏥';
+    if ($name === 'garden event space') return '🌳';
+    return '🏛️';
+}
+
+function normalize_facility_icon($iconValue, string $facilityName = ''): string
+{
+    $icon = trim((string)$iconValue);
+    if ($icon === '' || strpos($icon, '?') !== false || preg_match('/^\?+$/', $icon)) {
+        return default_icon_for_facility($facilityName);
+    }
+    return $icon;
+}
+
 function normalize_selected_add_ons($value): array
 {
     $items = is_array($value) ? $value : [];
@@ -358,7 +540,7 @@ function normalize_reservation_row(array $row): array
         'downPaymentAmount' => isset($row['down_payment_amount']) ? (float)$row['down_payment_amount'] : 0,
         'amountPaid' => isset($row['amount_paid']) ? (float)$row['amount_paid'] : 0,
         'totalCost' => isset($row['total_cost']) ? (float)$row['total_cost'] : 0,
-        'status' => (string)($row['status'] ?? 'pending'),
+        'status' => normalize_reservation_status_value($row['status'] ?? 'pending', $row['payment_status'] ?? 'pending'),
         'approvedBy' => $row['approved_by'] ?? null,
         'approvedAt' => $row['approved_at'] ?? null,
         'paymentStatus' => $row['payment_status'] ?? 'pending',
@@ -415,11 +597,32 @@ function ensure_reservation_optional_columns(PDO $pdo): void
     ensure_table_column($pdo, 'reservations', 'amount_paid', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
 }
 
+function ensure_reservation_status_workflow(PDO $pdo): void
+{
+    $pdo->exec("
+        UPDATE reservations
+        SET status = CASE
+            WHEN LOWER(status) IN ('pending_review', 'pending') THEN 'pending'
+            WHEN LOWER(status) IN ('approved', 'ready_for_billing', 'billing') THEN 'pending'
+            WHEN LOWER(status) IN ('confirmed', 'completed') THEN 'completed'
+            WHEN LOWER(status) IN ('rejected', 'cancelled') THEN 'cancelled'
+            ELSE status
+        END
+        WHERE LOWER(status) IN ('pending_review', 'pending', 'approved', 'ready_for_billing', 'billing', 'confirmed', 'completed', 'rejected', 'cancelled')
+    ");
+}
+
 function ensure_facility_optional_columns(PDO $pdo): void
 {
     ensure_table_column($pdo, 'facilities', 'event_types', 'TEXT DEFAULT NULL');
     ensure_table_column($pdo, 'facilities', 'event_types_archived', 'TEXT DEFAULT NULL');
     ensure_table_column($pdo, 'facilities', 'add_ons', 'TEXT DEFAULT NULL');
+    ensure_table_column($pdo, 'facilities', 'opening_time', 'TIME NULL DEFAULT NULL');
+    ensure_table_column($pdo, 'facilities', 'closing_time', 'TIME NULL DEFAULT NULL');
+    ensure_table_column($pdo, 'facilities', 'allows_overnight', 'TINYINT(1) NOT NULL DEFAULT 0');
+    ensure_table_column($pdo, 'facilities', 'allows_all_day', 'TINYINT(1) NOT NULL DEFAULT 0');
+    ensure_table_column($pdo, 'facilities', 'allows_multi_day', 'TINYINT(1) NOT NULL DEFAULT 0');
+    ensure_table_column($pdo, 'facilities', 'max_duration_hours', 'INT NULL DEFAULT NULL');
 }
 
 function ensure_facility_default_add_ons(PDO $pdo): void
@@ -432,6 +635,20 @@ function ensure_facility_default_add_ons(PDO $pdo): void
         $defaults = default_add_ons_for_facility((string)($row['name'] ?? ''));
         if (!$defaults) continue;
         $up->execute([json_encode($defaults, JSON_UNESCAPED_UNICODE), (int)$row['id']]);
+    }
+}
+
+function ensure_facility_icons(PDO $pdo): void
+{
+    $rows = $pdo->query('SELECT id,name,icon FROM facilities')->fetchAll();
+    $up = $pdo->prepare('UPDATE facilities SET icon = ? WHERE id = ?');
+    foreach ($rows as $row) {
+        $name = (string)($row['name'] ?? '');
+        $currentIcon = (string)($row['icon'] ?? '');
+        $normalized = normalize_facility_icon($currentIcon, $name);
+        if ($normalized !== $currentIcon) {
+            $up->execute([$normalized, (int)$row['id']]);
+        }
     }
 }
 

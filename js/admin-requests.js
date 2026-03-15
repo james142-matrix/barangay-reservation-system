@@ -33,6 +33,15 @@ function formatTimeRange(startTime, endTime) {
     return `${formatTime12Hour(startTime)} - ${formatTime12Hour(endTime)}`;
 }
 
+function formatEventDateRange(startDate, endDate) {
+    const start = startDate ? formatFullDate(startDate) : '-';
+    const end = endDate ? formatFullDate(endDate) : start;
+    if (!endDate || String(endDate) === String(startDate)) {
+        return start;
+    }
+    return `${start} → ${end}`;
+}
+
 function toDateInput(value) {
     if (!value) return '';
     const str = String(value);
@@ -249,6 +258,21 @@ function normalizeReservation(raw) {
     };
 }
 
+function getStatusBadgeClass(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'pending' || value === 'billing') return 'pending';
+    if (value === 'completed') return 'completed';
+    return 'rejected';
+}
+
+function getStatusLabel(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'pending' || value === 'billing') return 'Pending';
+    if (value === 'completed') return 'Completed';
+    if (value === 'cancelled') return 'Cancelled';
+    return value || 'Unknown';
+}
+
 async function loadRequests() {
     const [allReservations, users, facilities] = await Promise.all([
         window.api.getAllReservations(),
@@ -281,17 +305,15 @@ function displayRequests(requests) {
         const facility = facilitiesById.get(String(req.facilityId));
         const residentName = resident ? resident.fullname : (req.username || 'Unknown Client');
         const facilityName = facility ? facility.name : 'Unknown Facility';
-        const statusClass = req.status === 'pending'
-            ? 'pending'
-            : (req.status === 'approved' ? 'approved' : (req.status === 'completed' ? 'completed' : 'rejected'));
+        const statusClass = getStatusBadgeClass(req.status);
         const formattedSubmitted = formatFullDate(req.createdAt);
 
         html += '<tr>';
         html += `<td><strong>${escapeHtml(residentName)}</strong></td>`;
         html += `<td>${escapeHtml(facilityName)}</td>`;
-        html += `<td>${formatFullDate(req.eventDate)}</td>`;
+        html += `<td>${formatEventDateRange(req.eventStartDate || req.eventDate, req.eventEndDate || req.eventStartDate || req.eventDate)}</td>`;
         html += `<td>${formatTimeRange(req.startTime, req.endTime)}</td>`;
-        html += `<td><span class="badge ${statusClass}">${req.status.charAt(0).toUpperCase() + req.status.slice(1)}</span></td>`;
+        html += `<td><span class="badge ${statusClass}">${getStatusLabel(req.status)}</span></td>`;
         html += `<td>${formattedSubmitted}</td>`;
         html += `<td><button class="btn btn-sm btn-primary" onclick="openApprovalModal('${req.id}')">Review</button></td>`;
         html += '</tr>';
@@ -309,7 +331,7 @@ function getConflictListForRequest(request) {
     return currentRequests.filter(r => {
         if (r.facilityId !== request.facilityId) return false;
         if (String(r.id) === String(request.id)) return false;
-        if (r.status !== 'approved' && r.status !== 'pending') return false;
+        if (!['pending', 'completed', 'billing'].includes(String(r.status || '').toLowerCase())) return false;
 
         const rStart = new Date(`${r.eventStartDate || r.eventDate}T${r.startTime}`);
         const rEndDate = r.eventEndDate || r.eventDate;
@@ -327,7 +349,7 @@ function hasConflictForValues(facilityId, eventDate, eventEndDate, startTime, en
     return currentRequests.some(r => {
         if (String(r.id) === String(excludeId)) return false;
         if (String(r.facilityId) !== String(facilityId)) return false;
-        if (r.status !== 'approved' && r.status !== 'pending') return false;
+        if (!['pending', 'completed', 'billing'].includes(String(r.status || '').toLowerCase())) return false;
 
         const rStart = new Date(`${r.eventStartDate || r.eventDate}T${r.startTime}`);
         const rEndDate = r.eventEndDate || r.eventDate;
@@ -422,20 +444,16 @@ function buildEditSection(request, facility) {
 }
 
 function updateApprovalFooterButtons(request) {
-    const approveBtnModal = document.getElementById('approveBtnModal');
-    const rejectBtnModal = document.getElementById('rejectBtnModal');
     const editBtnModal = document.getElementById('editBtnModal');
     const saveEditBtnModal = document.getElementById('saveEditBtnModal');
     const cancelEditBtnModal = document.getElementById('cancelEditBtnModal');
 
-    if (!approveBtnModal || !rejectBtnModal || !editBtnModal || !saveEditBtnModal || !cancelEditBtnModal) return;
+    if (!editBtnModal || !saveEditBtnModal || !cancelEditBtnModal) return;
 
-    const isPending = request && request.status === 'pending';
-    approveBtnModal.style.display = (isPending && !isEditMode) ? 'block' : 'none';
-    rejectBtnModal.style.display = (isPending && !isEditMode) ? 'block' : 'none';
-    editBtnModal.style.display = (isPending && !isEditMode) ? 'block' : 'none';
-    saveEditBtnModal.style.display = (isPending && isEditMode) ? 'block' : 'none';
-    cancelEditBtnModal.style.display = (isPending && isEditMode) ? 'block' : 'none';
+    const isEditable = request && request.status === 'pending' && String(request.paymentStatus || 'pending').toLowerCase() === 'pending';
+    editBtnModal.style.display = (isEditable && !isEditMode) ? 'block' : 'none';
+    saveEditBtnModal.style.display = (isEditable && isEditMode) ? 'block' : 'none';
+    cancelEditBtnModal.style.display = (isEditable && isEditMode) ? 'block' : 'none';
 }
 
 function openApprovalModal(requestId) {
@@ -455,7 +473,7 @@ function openApprovalModal(requestId) {
     if (conflicts.length > 0) {
         conflictHtml = '<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin-bottom: 15px; border-radius: 4px;">';
         conflictHtml += '<strong>⚠️ Time Conflict Warning:</strong><br>';
-        conflictHtml += 'Other pending/approved reservations overlapping this schedule:';
+        conflictHtml += 'Other active reservations overlapping this schedule:';
         conflicts.forEach(r => {
             conflictHtml += `<br>• ${formatTimeRange(r.startTime, r.endTime)}`;
         });
@@ -488,7 +506,7 @@ function openApprovalModal(requestId) {
             </div>
             <div>
                 <strong style="color: #e83e8c;">Status</strong>
-                <p style="margin: 5px 0; color: #666;"><strong>Current:</strong> <span class="badge ${request.status}">${String(request.status || '').toUpperCase()}</span></p>
+                <p style="margin: 5px 0; color: #666;"><strong>Current:</strong> <span class="badge ${getStatusBadgeClass(request.status)}">${getStatusLabel(request.status)}</span></p>
                 <p style="margin: 5px 0; color: #666;"><strong>Submitted:</strong> ${formatFullDate(request.createdAt)}</p>
             </div>
         </div>
@@ -511,23 +529,14 @@ function openApprovalModal(requestId) {
         </div>
 
         ${conflictHtml}
-        ${request.status === 'pending' ? buildEditSection(request, facility) : ''}
+        ${request.status === 'pending' && String(request.paymentStatus || 'pending').toLowerCase() === 'pending' ? buildEditSection(request, facility) : ''}
     `;
 
-    if (request.status === 'rejected' && request.rejectionReason) {
+    if (!(request.status === 'pending' && String(request.paymentStatus || 'pending').toLowerCase() === 'pending')) {
         approvalBody += `
-            <div style="background: #f8d7da; border-left: 4px solid #f5c6cb; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
-                <strong style="color: #721c24;">Rejection Reason:</strong>
-                <p style="margin: 5px 0; color: #721c24;">${escapeHtml(request.rejectionReason)}</p>
-            </div>
-        `;
-    }
-
-    if (request.status === 'approved' && request.approvedBy) {
-        approvalBody += `
-            <div style="background: #d4edda; border-left: 4px solid #c3e6cb; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
-                <strong style="color: #155724;">Approved by Admin</strong>
-                <p style="margin: 5px 0; color: #155724;">Approved on: ${formatFullDate(request.approvedAt)}</p>
+            <div style="background: #f5f7fb; border-left: 4px solid #94a3b8; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+                <strong style="color: #334155;">View Only</strong>
+                <p style="margin: 5px 0; color: #475569;">Editing is no longer allowed after billing confirmation or cancellation.</p>
             </div>
         `;
     }
@@ -538,7 +547,7 @@ function openApprovalModal(requestId) {
 }
 
 function enterEditMode() {
-    if (!currentRequest || currentRequest.status !== 'pending') return;
+    if (!currentRequest || currentRequest.status !== 'pending' || String(currentRequest.paymentStatus || 'pending').toLowerCase() !== 'pending') return;
     isEditMode = true;
     const section = document.getElementById('approvalEditSection');
     if (section) section.style.display = 'block';
@@ -583,7 +592,7 @@ function updateRequestCache(updated) {
 }
 
 async function saveRequestEdits() {
-    if (!currentRequest || currentRequest.status !== 'pending') return;
+    if (!currentRequest || currentRequest.status !== 'pending' || String(currentRequest.paymentStatus || 'pending').toLowerCase() !== 'pending') return;
 
     const facility = facilitiesById.get(String(currentRequest.facilityId));
     if (!facility) {
@@ -648,7 +657,7 @@ async function saveRequestEdits() {
     }
 
     if (hasConflictForValues(currentRequest.facilityId, eventDate, eventEndDate, startTime, endTime, currentRequest.id)) {
-        showToast('Schedule conflicts with another pending/approved reservation.', 'warning');
+        showToast('Schedule conflicts with another active reservation.', 'warning');
         return;
     }
 
@@ -704,96 +713,10 @@ async function saveRequestEdits() {
     }
 }
 
-async function approveResv() {
-    if (!currentRequest) return;
-
-    const admin = getLoggedInUser();
-
-    try {
-        currentRequest = await window.api.updateReservation(currentRequest.id, {
-            status: 'approved',
-            approvedBy: admin.username,
-            approvedAt: new Date().toISOString()
-        });
-    } catch (e) {
-        showToast('Failed to approve reservation: ' + (e.message || 'Unknown error'), 'danger');
-        return;
-    }
-
-    const reservation = normalizeReservation(currentRequest);
-    if (reservation) {
-        const facility = facilitiesById.get(String(reservation.facilityId));
-        const facilityName = facility ? facility.name : 'Your facility';
-        createNotification(
-            reservation.username,
-            '✅ Reservation Approved!',
-            `Your reservation for ${facilityName} on ${formatDateOnly(reservation.eventDate)} has been APPROVED! Please visit the Billing dashboard to complete payment.`,
-            'approved',
-            reservation.id
-        );
-    }
-
-    showToast('Reservation approved successfully!', 'success');
-    closeApprovalModal();
-    loadRequests();
-}
-
-function showRejectForm() {
-    document.getElementById('rejectionReason').value = '';
-    document.getElementById('rejectReasonModal').classList.add('show');
-}
-
-async function submitRejection() {
-    if (!currentRequest) return;
-
-    const reason = document.getElementById('rejectionReason').value.trim();
-
-    if (!reason) {
-        showToast('Please provide a rejection reason', 'warning');
-        return;
-    }
-
-    const admin = getLoggedInUser();
-
-    try {
-        currentRequest = await window.api.updateReservation(currentRequest.id, {
-            status: 'rejected',
-            rejectionReason: reason,
-            rejectedBy: admin.username,
-            rejectedAt: new Date().toISOString()
-        });
-    } catch (e) {
-        showToast('Failed to reject reservation: ' + (e.message || 'Unknown error'), 'danger');
-        return;
-    }
-
-    const reservation = normalizeReservation(currentRequest);
-    if (reservation) {
-        const facility = facilitiesById.get(String(reservation.facilityId));
-        const facilityName = facility ? facility.name : 'Your facility';
-        createNotification(
-            reservation.username,
-            '❌ Reservation Rejected',
-            `Your reservation for ${facilityName} on ${formatDateOnly(reservation.eventDate)} has been REJECTED. Reason: ${reason}`,
-            'rejected',
-            reservation.id
-        );
-    }
-
-    showToast('Reservation rejected successfully!', 'success');
-    closeRejectModal();
-    closeApprovalModal();
-    loadRequests();
-}
-
 function closeApprovalModal() {
     currentRequest = null;
     isEditMode = false;
     document.getElementById('approvalModal').classList.remove('show');
-}
-
-function closeRejectModal() {
-    document.getElementById('rejectReasonModal').classList.remove('show');
 }
 
 function filterRequests() {
@@ -828,38 +751,34 @@ function filterRequests() {
 
 function renderRequestStats(requests) {
     const pendingEl = document.getElementById('statPendingCount');
-    const approvedEl = document.getElementById('statApprovedCount');
+    const totalEl = document.getElementById('statTotalCount');
     const completedEl = document.getElementById('statCompletedCount');
     const rejectedEl = document.getElementById('statRejectedCount');
-    if (!pendingEl || !approvedEl || !completedEl || !rejectedEl) return;
+    if (!totalEl || !pendingEl || !completedEl || !rejectedEl) return;
 
+    let total = 0;
     let pending = 0;
-    let approved = 0;
     let completed = 0;
-    let rejected = 0;
+    let cancelled = 0;
 
     (requests || []).forEach((req) => {
+        total += 1;
         const status = String(req.status || '').toLowerCase();
         if (status === 'pending') pending += 1;
-        if (status === 'approved') approved += 1;
         if (status === 'completed') completed += 1;
-        if (status === 'rejected') rejected += 1;
+        if (status === 'cancelled') cancelled += 1;
     });
 
+    totalEl.textContent = String(total);
     pendingEl.textContent = String(pending);
-    approvedEl.textContent = String(approved);
     completedEl.textContent = String(completed);
-    rejectedEl.textContent = String(rejected);
+    rejectedEl.textContent = String(cancelled);
 }
 
 document.addEventListener('click', function(event) {
     const approvalModal = document.getElementById('approvalModal');
-    const rejectReasonModal = document.getElementById('rejectReasonModal');
 
     if (event.target === approvalModal) {
         closeApprovalModal();
-    }
-    if (event.target === rejectReasonModal) {
-        closeRejectModal();
     }
 });

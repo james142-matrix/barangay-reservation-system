@@ -1,68 +1,95 @@
 # Verification Checklist
 
-Use this checklist before demo, handoff, or release.
+Use this before demo, handoff, or release.
 
-## 1. Documentation Accuracy
+## 1. Documentation
 
-Mark each item once verified against actual behavior.
+- [ ] `README.md` matches the current PHP/MySQL app
+- [ ] `QUICKSTART.md` works on a clean XAMPP setup
+- [ ] `HOW-TO-USE.md` matches actual admin/staff workflows
+- [ ] `ARCHITECTURE.md` matches session, CSRF, and API behavior
+- [ ] `SYSTEM-FLOW.md` matches current reservation/billing flow
+- [ ] `DEPLOYMENT.md` matches real deployment steps
+- [ ] `SIA-PROJECT-DOCUMENTATION.md` matches the current project scope
+- [ ] `mobile_app/README.md` matches the actual mobile project state
 
-- [ ] `README.md` matches current pages, API, and role policy
-- [ ] `QUICKSTART.md` works as-is on a clean local setup
-- [ ] `HOW-TO-USE.md` matches real staff/admin operations
-- [ ] `ARCHITECTURE.md` matches current PHP session architecture
-- [ ] `SYSTEM-FLOW.md` matches real API and page workflow
-- [ ] `FULL-STACK-EXPLANATION.md` matches active code paths
-- [ ] `DEPLOYMENT.md` matches deployment method in use
-- [ ] `TODO.md` and `COMPLETION.md` are synchronized
+## 2. Setup
 
-## 2. UI Smoke Tests
+- [ ] `.env` exists
+- [ ] database imports cleanly from `database.sql`
+- [ ] mail settings are valid if password reset is required
+- [ ] logs directory is writable
 
-- [ ] Login works for `admin`
-- [ ] Login works for `barangay_staff`
-- [ ] Unauthorized role is blocked
-- [ ] Reservation creation works in `reserve.php`
-- [ ] Request approve/reject works in `*-requests.php`
-- [ ] Billing cash confirmation works in `*-billing.php`
-- [ ] Notifications appear after request updates and payment
-- [ ] Admin user management works in `admin-users.php`
-- [ ] Reports load correctly in `reports.php`
-- [ ] Forgot-password flow works end-to-end
+## 3. Authentication
 
-## 3. API Smoke Tests
+- [ ] `admin` login works
+- [ ] `barangay_staff` login works
+- [ ] pending signup cannot log in
+- [ ] blocked role cannot log in
+- [ ] logout works
+- [ ] session expiry behavior is acceptable
+- [ ] repeated bad logins trigger rate limiting
 
-- [ ] `POST /auth/login`
-- [ ] `GET /auth/me`
-- [ ] `POST /auth/logout`
-- [ ] `GET /facilities`
-- [ ] `POST /facilities`
-- [ ] `PUT /facilities/:id`
-- [ ] `DELETE /facilities/:id`
-- [ ] `GET /reservations`
-- [ ] `POST /reservations`
-- [ ] `PUT /reservations/:id`
-- [ ] `DELETE /reservations/:id`
-- [ ] `GET /notifications`
-- [ ] `POST /notifications`
-- [ ] `PUT /notifications/:id/read`
-- [ ] `GET /users`
-- [ ] `POST /users`
-- [ ] `PUT /users/:id`
-- [ ] `DELETE /users/:id`
-- [ ] `POST /users/forgot-password/check-email`
-- [ ] `POST /users/forgot-password/request`
-- [ ] `POST /users/forgot-password/reset`
+## 4. Reservation Flow
 
-## 4. Data Verification
+- [ ] reservation form loads facilities
+- [ ] overlap detection works
+- [ ] capacity validation works
+- [ ] facility rule validation works
+- [ ] medical room detail requirement works
+- [ ] down-payment option works
+- [ ] add-on totals behave correctly
+- [ ] request appears in requests page after save
 
-- [ ] Reservation records show correct status transitions
-- [ ] Payment fields are correct after cash confirmation
-- [ ] Notification records match user actions
-- [ ] Archived items are hidden from normal active lists
+## 5. Request Review
 
-## 5. Release Decision
+- [ ] admin requests page loads
+- [ ] staff requests page loads
+- [ ] pending unpaid reservation can still be edited
+- [ ] edited reservation re-validates schedule/rules
+- [ ] billed reservation becomes view-only
 
-- [ ] All critical checks passed
-- [ ] Known issues are documented
-- [ ] Team agrees build is ready for demo/release
+## 6. Billing
 
-Last updated: 2026-03-07
+- [ ] billing list loads
+- [ ] down payment collection works
+- [ ] remaining balance collection works
+- [ ] full payment marks reservation completed
+- [ ] unpaid pending reservation can be cancelled
+- [ ] payment notification is created
+- [ ] receipt email sends when mail is configured
+
+## 7. Admin Operations
+
+- [ ] create user works
+- [ ] approve signup works
+- [ ] decline/archive user works
+- [ ] protected admin checks work
+- [ ] create facility works
+- [ ] edit facility works
+- [ ] archive facility works
+- [ ] archive center loads
+- [ ] restore archived user works
+- [ ] restore archived facility works
+
+## 8. Reports
+
+- [ ] reports page loads without JS/API errors
+- [ ] CSV export works
+- [ ] print/PDF export works
+- [ ] totals look correct for current data
+- [ ] legacy "In Billing" labels are understood/accepted for demo
+
+## 9. Password Recovery
+
+- [ ] check-email endpoint works
+- [ ] reset code request works
+- [ ] code expiry works
+- [ ] password reset works end to end
+
+## 10. Mobile Project
+
+- [ ] mobile README matches current state
+- [ ] team understands `mobile_app/lib/main.dart` is still not wired to the real app shell
+
+Last updated: 2026-03-15

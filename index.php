@@ -53,22 +53,20 @@
                 New staff? <a href="signup.php">Submit signup request</a>
             </div>
             
-            <div class="demo-info">
-                <strong>Demo Credentials:</strong><br>
-                Admin: admin / admin123<br>
-                Staff: staff1 / staff123
-            </div>
         </div>
     </div>
 
-    <script src="js/database.js?v=20260303b"></script>
+    <script src="js/database.js?v=20260309e"></script>
     <script src="js/services/auth-service.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
+    <script src="js/api.js?v=20260309d"></script>
+    <script src="js/auth.js?v=20260309d"></script>
     <script src="js/login.js?v=20260303b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
 
 
 

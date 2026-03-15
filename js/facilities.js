@@ -1,6 +1,6 @@
 // Initialize facilities page
 document.addEventListener('DOMContentLoaded', function() {
-    // Allow both admins and residents to access facilities page
+    // Staff/admin authenticated access
     if (!checkAuth()) return;
     bindNotificationToggle();
     loadFacilities().catch(err => {
@@ -50,10 +50,11 @@ function createFacilityCard(facility) {
     const card = document.createElement('div');
     card.className = 'facility-card';
     card.addEventListener('click', () => showFacilityModal(facility));
+    const facilityIcon = resolveFacilityIcon(facility);
     
     card.innerHTML = `
         <div class="facility-image">
-            ${facility.icon}
+            ${facilityIcon}
         </div>
         <div class="facility-info">
             <h3>${facility.name}</h3>
@@ -89,7 +90,7 @@ function showFacilityModal(facility, e) {
     
     document.getElementById('modalBody').innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">
-            <div style="font-size: 64px; margin-bottom: 15px;">${facility.icon}</div>
+            <div style="font-size: 64px; margin-bottom: 15px;">${resolveFacilityIcon(facility)}</div>
             <h2>${facility.name}</h2>
             <p style="color: #666; margin-bottom: 20px;">${facility.description}</p>
         </div>
@@ -122,7 +123,9 @@ function closeFacilityModal() {
 
 function goToReserve() {
     if (selectedFacility) {
-        window.location.href = `reserve.php?facility=${encodeURIComponent(selectedFacility.id)}`;
+        const user = getLoggedInUser();
+        const reserveBase = user && user.role === 'admin' ? 'admin-reserve.php' : 'barangay-staff-reserve.php';
+        window.location.href = `${reserveBase}?facility=${encodeURIComponent(selectedFacility.id)}`;
     }
 }
 
@@ -245,6 +248,23 @@ function bindNotificationToggle() {
     const btn = document.getElementById('notificationToggleBtn');
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
+}
+
+function defaultFacilityIconByName(name) {
+    const key = String(name || '').trim().toLowerCase();
+    if (key === 'community hall') return '🏛️';
+    if (key === 'sports complex') return '🏀';
+    if (key === 'cultural center') return '🎭';
+    if (key === 'library & learning center') return '📚';
+    if (key === 'medical room') return '🏥';
+    if (key === 'garden event space') return '🌳';
+    return '🏛️';
+}
+
+function resolveFacilityIcon(facility) {
+    const icon = String((facility && facility.icon) || '').trim();
+    if (!icon || icon.includes('?')) return defaultFacilityIconByName(facility && facility.name);
+    return icon;
 }
 
 

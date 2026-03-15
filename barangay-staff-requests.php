@@ -1,10 +1,15 @@
+<?php
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Approval Requests - Barangay Molugan</title>
-    <link rel="stylesheet" href="css/style.css?v=20260306d">
+    <title>Review Requests - Barangay Molugan</title>
+    <link rel="stylesheet" href="css/style.css?v=<?php echo urlencode((string) filemtime(__DIR__ . '/css/style.css')); ?>">
 </head>
 <body class="requests-page">
     <!-- Navbar -->
@@ -16,54 +21,55 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="barangay-staff-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="barangay-staff-requests.php" class="active">📋 Approval Requests</a></li>
-            <li><a href="barangay-staff-billing.php">💳 Billing</a></li>
+            <li><a href="barangay-staff-requests.php" class="active">📋 Review Requests</a></li>
+            <li><a href="barangay-staff-billing.php">💳 Payments & Billing</a></li>
             <li><a href="barangay-staff-facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="barangay-staff-reserve.php">➕ New Reservation</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="dashboard-header requests-hero">
-            <div>
-                <h1>Reservation Approval Requests</h1>
-                <p>Review and manage incoming client reservations with clear status tracking.</p>
-            </div>
-            <div class="requests-quick-stats">
-                <div class="quick-stat-card">
-                    <span class="quick-stat-label">Pending</span>
-                    <strong id="statPendingCount">0</strong>
-                </div>
-                <div class="quick-stat-card">
-                    <span class="quick-stat-label">Approved</span>
-                    <strong id="statApprovedCount">0</strong>
-                </div>
-                <div class="quick-stat-card">
-                    <span class="quick-stat-label">Completed</span>
-                    <strong id="statCompletedCount">0</strong>
-                </div>
-                <div class="quick-stat-card">
-                    <span class="quick-stat-label">Rejected</span>
-                    <strong id="statRejectedCount">0</strong>
-                </div>
+        <div class="dashboard-header page-title-row">
+            <div class="dashboard-heading">
+                <h1>📋 Reservation Review Requests</h1>
             </div>
         </div>
 
-        <!-- Filters -->
-        <div class="table-container requests-filter-shell">
-            <div class="filter-bar">
+        <div class="requests-stats">
+            <div class="requests-stat-card">
+                <h4>Total</h4>
+                <div class="stat-value" id="statTotalCount">0</div>
+            </div>
+            <div class="requests-stat-card pending">
+                <h4>Pending</h4>
+                <div class="stat-value" id="statPendingCount">0</div>
+            </div>
+            <div class="requests-stat-card completed">
+                <h4>Completed</h4>
+                <div class="stat-value" id="statCompletedCount">0</div>
+            </div>
+            <div class="requests-stat-card rejected">
+                <h4>Cancelled</h4>
+                <div class="stat-value" id="statRejectedCount">0</div>
+            </div>
+        </div>
+
+        <div class="filter-bar requests-filter-bar">
+            <div class="filter-group">
+                <label for="searchInput">Search</label>
                 <input 
                     type="text" 
                     id="searchInput" 
-                    placeholder="Search by client name or facility..." 
+                    placeholder="Client name or facility..." 
                     onkeyup="filterRequests()">
+            </div>
+            <div class="filter-group">
+                <label for="statusFilter">Request Status</label>
                 <select id="statusFilter" onchange="filterRequests()">
                     <option value="" selected>All Requests</option>
                     <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                 </select>
@@ -78,7 +84,7 @@
         </div>
     </main>
 
-    <!-- Approval Modal -->
+    <!-- Review Modal -->
     <div id="approvalModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -92,37 +98,23 @@
                 <button class="btn btn-secondary" id="editBtnModal" onclick="enterEditMode()">Edit Details</button>
                 <button class="btn btn-secondary" id="cancelEditBtnModal" onclick="cancelEditMode()" style="display:none;">Cancel Edit</button>
                 <button class="btn btn-primary" id="saveEditBtnModal" onclick="saveRequestEdits()" style="display:none;">Save Changes</button>
-                <button class="btn btn-danger" id="rejectBtnModal" onclick="showRejectForm()">Reject</button>
-                <button class="btn btn-success" id="approveBtnModal" onclick="approveResv()">Approve</button>
             </div>
         </div>
     </div>
 
-    <!-- Rejection Reason Modal -->
-    <div id="rejectReasonModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Reject Reservation</h2>
-                <button class="close-modal" onclick="closeRejectModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <p style="margin-bottom: 15px;">Please provide a reason for rejection:</p>
-                <textarea id="rejectionReason" rows="4" placeholder="Enter rejection reason..." style="width: 100%; padding: 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-family: inherit;"></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeRejectModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="submitRejection()">Reject</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/barangay-staff-requests.js?v=20260306g"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/database.js')); ?>"></script>
+    <script src="js/auth.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/auth.js')); ?>"></script>
+    <script src="js/api.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/api.js')); ?>"></script>
+    <script src="js/barangay-staff-requests.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/barangay-staff-requests.js')); ?>"></script>
+    <script src="js/responsive.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/responsive.js')); ?>"></script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 

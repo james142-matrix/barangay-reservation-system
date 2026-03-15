@@ -25,6 +25,11 @@ document.addEventListener('DOMContentLoaded', function() {
 let billingReservations = [];
 let facilitiesById = new Map();
 
+function getReserveUrlByRole() {
+    const user = getLoggedInUser();
+    return user && user.role === 'admin' ? 'admin-reserve.php' : 'barangay-staff-reserve.php';
+}
+
 function normalizeReservation(raw) {
     if (!raw) return raw;
     return {
@@ -74,7 +79,7 @@ function displayBillingList(reservations) {
                 <div class="empty-state-icon">💳</div>
                 <h3>No Pending Payments</h3>
                 <p>You don't have any approved reservations waiting for payment.</p>
-                <a href="reserve.php" class="btn btn-primary">Make a Reservation</a>
+                <a href="${getReserveUrlByRole()}" class="btn btn-primary">Make a Reservation</a>
             </div>
         `;
         return;

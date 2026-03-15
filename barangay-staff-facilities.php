@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Facilities - Barangay Molugan Staff</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=20260309e">
 </head>
 <body class="staff-facilities-page">
     <!-- Navbar -->
@@ -16,10 +16,10 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="barangay-staff-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="barangay-staff-requests.php">📋 Approval Requests</a></li>
-            <li><a href="barangay-staff-billing.php">💳 Billing</a></li>
+            <li><a href="barangay-staff-requests.php">📋 Review Requests</a></li>
+            <li><a href="barangay-staff-billing.php">💳 Payments & Billing</a></li>
             <li><a href="barangay-staff-facilities.php" class="active">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="barangay-staff-reserve.php">➕ New Reservation</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
     </aside>
@@ -62,18 +62,23 @@
             <div class="modal-body" id="facilityModalBody"></div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeFacilityModal()">Close</button>
-                <a href="reserve.php" class="btn btn-primary">New Reservation</a>
+                <a href="barangay-staff-reserve.php" class="btn btn-primary">New Reservation</a>
             </div>
         </div>
     </div>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/barangay-staff-facilities.js?v=20260306b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=20260309e"></script>
+    <script src="js/auth.js?v=20260309d"></script>
+    <script src="js/api.js?v=20260309d"></script>
+    <script src="js/barangay-staff-facilities.js?v=20260309d"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
+
+
 
 
 

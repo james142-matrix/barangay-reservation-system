@@ -1,85 +1,131 @@
 # Architecture
 
-This document explains how the system is organized and how data moves between layers.
+High-level structure of the current system.
 
-## 1. High-Level Structure
+## 1. Layers
 
-The system has 3 main layers:
+### Presentation Layer
 
-1. Presentation layer
-- Root PHP pages (`*.php`) render screens.
-- `css/style.css` provides shared styles.
-- `js/*.js` handles page behavior and API calls.
+- Root PHP pages render the web UI.
+- `css/style.css` provides shared styling.
+- `js/*.js` handles page logic, filters, modals, and API calls.
 
-2. Application layer
-- `js/api.js` is the frontend API wrapper.
-- `js/auth.js` checks session and role access on protected pages.
-- `api/index.php` is the main backend API router.
+### Application Layer
 
-3. Data layer
-- MySQL database stores business records.
-- `database.sql` defines schema and seed data.
-- `api/db.php` handles runtime DB connection.
+- `js/api.js` is the browser API wrapper.
+- `js/auth.js` handles session checks and role redirects.
+- `api/index.php` is the central JSON API router.
+- `api/helpers.php` contains shared validation, normalization, and mail helpers.
 
-## 2. Request Lifecycle
+### Data Layer
 
-Typical flow for any protected action:
+- MySQL stores all business data.
+- `database.sql` provides the current full schema and seed data.
+- `migrations/*.sql` support upgrades for older databases.
 
-1. User opens a PHP page.
-2. Frontend script runs and verifies session (`GET /auth/me`).
-3. Frontend sends request to API endpoint.
-4. API validates auth, role, and input.
+## 2. Runtime Model
+
+1. Browser loads a PHP page.
+2. Page JS calls `GET /auth/me`.
+3. If authenticated, frontend requests protected API data.
+4. API validates session, role, CSRF token, and payload.
 5. API reads/writes MySQL.
-6. API returns JSON response.
-7. Frontend updates UI based on response.
+6. API returns JSON to the page.
 
-## 3. Authentication Model
+## 3. Authentication Design
 
-- Login endpoint authenticates user credentials.
-- Successful login stores sanitized user data in `$_SESSION['user']`.
-- Browser includes session cookie on API calls (`credentials: 'include'`).
-- Guards used by API:
-- `require_auth()` for signed-in users
-- `require_role([...])` for role restrictions
+- Login uses PHP sessions, not JWT.
+- Session cookie name defaults to `barangay_session`.
+- API also supports a tab-scoped session id via `X-Tab-Session`.
+- CSRF protection is enforced on non-exempt write routes.
+- Session idle timeout is controlled by `SESSION_IDLE_TIMEOUT_SEC`.
+- Login attempts are rate-limited by user and IP.
 
-## 4. Role and Access Rules
+## 4. Role Model
 
-Current login policy:
-- Allowed: `admin`, `barangay_staff`
-- Blocked: `resident`
+Allowed interactive roles:
 
-Role-based pages and actions are enforced in both frontend checks and backend API guards.
+- `admin`
+- `barangay_staff`
 
-## 5. API Domain Groups
+Blocked role:
 
-Main route groups:
-- `/auth/*`
-- `/users*`
-- `/facilities*`
-- `/reservations*`
-- `/notifications*`
-- `/users/forgot-password/*`
+- `resident`
 
-## 6. Data Model (Core Tables)
+Approval model:
 
-- `users`: accounts and role data
-- `facilities`: reservable locations/resources
-- `reservations`: request records and status
-- `billing_transactions`: payment history and billing details
-- `notifications`: user-targeted updates
-- `password_reset_codes`: hashed reset codes with expiry
+- `signup.php` creates pending staff accounts
+- admin approves via `POST /users/:id/approve`
 
-## 7. Important Business Rules
+## 5. Main Domain Areas
 
-- Reservation overlap checks run server-side before insert/update.
-- Many delete actions are soft delete (archive flag), not hard delete.
-- Billing completion is currently based on onsite cash confirmation.
-- Admin manages users; staff/admin manage operational reservation flow.
+- Authentication
+- Users and approval queue
+- Facilities and facility rules
+- Reservations
+- Billing/payment updates
+- Notifications
+- Archive and restore
+- Reports
+- Password recovery
 
-## 8. Error Handling Approach
+## 6. Core Data Tables
 
-- API returns JSON error payloads.
-- Frontend wrapper parses response and surfaces meaningful `error` messages.
-- Session or role failure redirects user to appropriate page.
+- `users`
+- `facilities`
+- `reservations`
+- `billing_transactions`
+- `notifications`
+- `password_reset_codes`
+- `auth_login_throttle`
+- `schema_migrations`
 
-Last updated: 2026-03-07
+## 7. Facility Rule Architecture
+
+Facility records contain reservation policy fields:
+
+- `opening_time`
+- `closing_time`
+- `allows_overnight`
+- `allows_all_day`
+- `allows_multi_day`
+- `max_duration_hours`
+- `event_types`
+- `add_ons`
+
+These rules are validated in the API before reservation create/update succeeds.
+
+## 8. Reservation / Billing Model
+
+- Reservation details live in `reservations`.
+- Payment progress is tracked with:
+  - `payment_option`
+  - `down_payment_amount`
+  - `amount_paid`
+  - `payment_status`
+  - `payment_method`
+  - `payment_date`
+- Billing actions are currently implemented by updating reservation payment fields from the billing page.
+- `billing_transactions` exists for ledger/audit use in the schema, but the current API flow primarily relies on reservation payment columns.
+
+## 9. Archive Model
+
+Most delete actions are soft deletes:
+
+- users -> `archived = 1`
+- facilities -> `archived = 1`
+- reservations -> `archived = 1`
+
+Admin restore endpoints exist for all three.
+
+## 10. Mobile App Status
+
+`mobile_app/` contains a Flutter client that targets the same API.
+
+Important current state:
+
+- feature modules exist under `mobile_app/lib/src`
+- `mobile_app/lib/src/app.dart` contains the actual app shell
+- `mobile_app/lib/main.dart` is still wired to a rubric/demo screen, so the mobile app is not yet using the real shell as its active entrypoint
+
+Last updated: 2026-03-15

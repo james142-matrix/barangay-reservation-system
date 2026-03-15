@@ -1,0 +1,4 @@
+.env
+logs/
+backups/db/*.sql
+!backups/db/.gitkeep

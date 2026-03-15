@@ -11,16 +11,6 @@ function initializeDatabase() {
         users: [
             {
                 id: 1,
-                username: "resident1",
-                password: "resident123",
-                email: "resident1@barangay.ph",
-                fullname: "Juan Dela Cruz",
-                phone: "09123456789",
-                address: "Molugan, Iloilo",
-                role: "resident"
-            },
-            {
-                id: 2,
                 username: "staff1",
                 password: "staff123",
                 email: "staff1@barangay.ph",
@@ -30,7 +20,7 @@ function initializeDatabase() {
                 role: "barangay_staff"
             },
             {
-                id: 3,
+                id: 2,
                 username: "staff2",
                 password: "staff123",
                 email: "staff2@barangay.ph",
@@ -278,7 +268,7 @@ async function createUser(userData) {
         id: Date.now(),
         ...userData,
         password: hashedPassword,
-        role: userData.role || "resident",
+        role: userData.role || "barangay_staff",
         archived: false
     };
     db.users.push(newUser);
@@ -475,9 +465,9 @@ function deleteReservation(id) {
     saveDatabase(db);
 }
 
-function approveReservation(id, adminUsername) {
+function sendReservationToBilling(id, adminUsername) {
     return updateReservation(id, {
-        status: "approved",
+        status: "billing",
         approvedAt: new Date().toISOString(),
         approvedBy: adminUsername
     });
@@ -485,7 +475,7 @@ function approveReservation(id, adminUsername) {
 
 function rejectReservation(id, reason, adminUsername) {
     return updateReservation(id, {
-        status: "rejected",
+        status: "cancelled",
         rejectionReason: reason,
         rejectedAt: new Date().toISOString(),
         rejectedBy: adminUsername
@@ -498,7 +488,7 @@ function payReservation(id, method) {
         paymentStatus: "paid",
         paymentMethod: method,
         paymentDate: new Date().toISOString(),
-        status: "completed" // mark complete once paid
+        status: "completed"
     };
     return updateReservation(id, updates);
 }
@@ -517,12 +507,12 @@ function markReservationCash(id) {
 // BILLING HELPER FUNCTIONS
 // ===========================
 
-// Returns approved reservations that have not yet been paid for a specific user
+// Returns billing reservations that have not yet been fully paid for a specific user
 function getUnpaidReservationsByUser(username) {
     const db = getDatabase();
     return db.reservations.filter(r =>
         r.username === username &&
-        r.status === 'approved' &&
+        r.status === 'billing' &&
         r.paymentStatus !== 'paid' &&
         r.paymentStatus !== 'cash'
     );
@@ -544,8 +534,9 @@ function getReservationStats() {
     return {
         total: reservations.length,
         pending: reservations.filter(r => r.status === "pending").length,
-        approved: reservations.filter(r => r.status === "approved").length,
-        rejected: reservations.filter(r => r.status === "rejected").length,
+        approved: reservations.filter(r => r.status === "billing").length,
+        rejected: reservations.filter(r => r.status === "cancelled").length,
+        confirmed: reservations.filter(r => r.status === "completed").length,
         completed: reservations.filter(r => r.status === "completed").length
     };
 }
@@ -589,9 +580,29 @@ function getNotificationsByUser(username) {
             const base = window.API_BASE_URL || '/barangay-reservation-system/api';
             xhr.open('GET', `${base}/notifications?user=${encodeURIComponent(username)}`, false);
             xhr.withCredentials = true;
+            try {
+                let tabSessionId = sessionStorage.getItem('brs_tab_session_id') || '';
+                if (!tabSessionId) {
+                    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+                        const bytes = new Uint8Array(24);
+                        window.crypto.getRandomValues(bytes);
+                        tabSessionId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                    } else {
+                        tabSessionId = `${Date.now()}${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+                    }
+                    sessionStorage.setItem('brs_tab_session_id', tabSessionId);
+                }
+                if (tabSessionId) {
+                    xhr.setRequestHeader('X-Tab-Session', tabSessionId);
+                }
+            } catch (e) {
+                // Ignore storage failures and continue with cookie session fallback.
+            }
             xhr.send();
             if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
-                return JSON.parse(xhr.responseText).map(r => ({
+                const parsed = JSON.parse(xhr.responseText);
+                const list = Array.isArray(parsed) ? parsed : [];
+                return list.map(r => ({
                     id: r.id,
                     username: r.username,
                     title: r.title,

@@ -16,11 +16,11 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="admin-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="admin-requests.php">📋 Approval Requests</a></li>
-            <li><a href="admin-billing.php">💳 Billing</a></li>
+            <li><a href="admin-requests.php">📋 Review Requests</a></li>
+            <li><a href="admin-billing.php">💳 Payments & Billing</a></li>
             <li><a href="admin-users.php" class="active">👥 Users</a></li>
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="admin-reserve.php">➕ New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
             <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
@@ -97,11 +97,11 @@
             <form id="userForm" onsubmit="saveUser(event)">
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Full Name *</label>
-                    <input type="text" id="fullname" required style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
+                    <input type="text" id="fullname" required maxlength="100" inputmode="text" pattern="[A-Za-z\s.'-]{3,100}" title="Use letters, spaces, and basic punctuation only." style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Username *</label>
-                    <input type="text" id="username" required style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
+                    <input type="text" id="username" required maxlength="50" pattern="[A-Za-z0-9_.-]{3,50}" title="Use 3-50 letters, numbers, dot, underscore, or hyphen." style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email *</label>
@@ -113,11 +113,11 @@
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Phone</label>
-                    <input type="text" id="phone" style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
+                    <input type="text" id="phone" maxlength="12" inputmode="numeric" pattern="(?:09[0-9]{9}|639[0-9]{9})" title="Use a valid PH mobile number." style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Address</label>
-                    <input type="text" id="address" style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
+                    <input type="text" id="address" maxlength="180" style="width: 100%; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px;">
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; font-weight: 500;">Role *</label>
@@ -135,13 +135,19 @@
     </div>
 
     <script src="js/password-policy.js?v=20260303b"></script>
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
+    <script src="js/database.js?v=20260309e"></script>
+    <script src="js/auth.js?v=20260309d"></script>
+    <script src="js/api.js?v=20260309d"></script>
     <script src="js/admin-users.js?v=20260307b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 

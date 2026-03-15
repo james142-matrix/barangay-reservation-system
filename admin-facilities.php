@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Facilities - Barangay Molugan</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=20260309e">
 </head>
 <body class="staff-facilities-page">
     <!-- Navbar -->
@@ -16,11 +16,11 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="admin-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="admin-requests.php">📋 Approval Requests</a></li>
-            <li><a href="admin-billing.php">💳 Billing</a></li>
+            <li><a href="admin-requests.php">📋 Review Requests</a></li>
+            <li><a href="admin-billing.php">💳 Payments & Billing</a></li>
             <li><a href="admin-users.php">👥 Users</a></li>
             <li><a href="admin-facilities.php" class="active">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="admin-reserve.php">➕ New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
             <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
@@ -88,6 +88,47 @@
                         <input type="number" id="facilityPrice" required min="0" step="0.01">
                     </div>
 
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="facilityOpeningTime">Opening Time</label>
+                            <input type="time" id="facilityOpeningTime">
+                        </div>
+                        <div class="form-group">
+                            <label for="facilityClosingTime">Closing Time</label>
+                            <input type="time" id="facilityClosingTime">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="facilityAllowsOvernight">Allow Overnight Use</label>
+                            <select id="facilityAllowsOvernight">
+                                <option value="0">No</option>
+                                <option value="1">Yes</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="facilityAllowsAllDay">Allow All-Day Use</label>
+                            <select id="facilityAllowsAllDay">
+                                <option value="0">No</option>
+                                <option value="1">Yes</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityAllowsMultiDay">Allow Multi-Day Reservation</label>
+                        <select id="facilityAllowsMultiDay">
+                            <option value="0">No</option>
+                            <option value="1">Yes</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="facilityMaxDurationHours">Maximum Duration (hours)</label>
+                        <input type="number" id="facilityMaxDurationHours" min="1" step="1" placeholder="Leave blank for no max duration limit">
+                    </div>
+
                     <div class="form-group">
                         <label for="facilityDescription">Description</label>
                         <textarea id="facilityDescription" rows="4"></textarea>
@@ -123,13 +164,18 @@
         </div>
     </div>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-facilities.js?v=20260306e"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=20260309e"></script>
+    <script src="js/auth.js?v=20260309d"></script>
+    <script src="js/api.js?v=20260309d"></script>
+    <script src="js/admin-facilities.js?v=20260311b"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
+
+
 
 
 

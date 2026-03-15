@@ -15,11 +15,11 @@
     <!-- Sidebar -->
     <aside class="sidebar">
         <ul class="sidebar-menu">
-            <li><a href="resident-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="barangay-staff-requests.php">📋 Approval Requests</a></li>
+            <li><a href="barangay-staff-dashboard.php">📊 Dashboard</a></li>
+            <li><a href="barangay-staff-requests.php">📋 Review Requests</a></li>
             <li><a href="billing.php">💳 Billing</a></li>
             <li><a href="facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="barangay-staff-reserve.php">➕ New Reservation</a></li>
             <li><a href="my-reservations.php" class="active">📋 Reservation Records</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
         </ul>
@@ -36,7 +36,7 @@
                     </button>
                     <div id="notificationPanel" class="notification-panel"></div>
                 </div>
-                <a href="reserve.php" class="btn btn-primary">➕ New Reservation</a>
+                <a href="barangay-staff-reserve.php" class="btn btn-primary">➕ New Reservation</a>
             </div>
         </div>
 
@@ -86,13 +86,18 @@
     </div>
 
     <!-- include API helper to allow backend calls -->
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
+    <script src="js/api.js?v=20260309d"></script>
+    <script src="js/database.js?v=20260309e"></script>
+    <script src="js/auth.js?v=20260309d"></script>
     <script src="js/my-reservations.js?v=20260303b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
+
+
 
 
 

@@ -1,5 +1,61 @@
 let __sessionUserCache = null;
 let __sessionUserCacheTs = 0;
+const TAB_SESSION_KEY = 'brs_tab_session_id';
+const CSRF_TOKEN_KEY = 'brs_csrf_token';
+
+function generateTabSessionId() {
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return `${Date.now()}${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+}
+
+function getTabSessionId() {
+    try {
+        return sessionStorage.getItem(TAB_SESSION_KEY) || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function setTabSessionId(value) {
+    const sessionId = String(value || '').trim();
+    if (!sessionId) return;
+    try {
+        sessionStorage.setItem(TAB_SESSION_KEY, sessionId);
+    } catch (e) {
+        // ignore storage failures
+    }
+}
+
+function ensureTabSessionId() {
+    let sessionId = getTabSessionId();
+    if (!sessionId) {
+        sessionId = generateTabSessionId();
+        setTabSessionId(sessionId);
+    }
+    return sessionId;
+}
+
+function getCsrfToken() {
+    try {
+        return sessionStorage.getItem(CSRF_TOKEN_KEY) || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function setCsrfToken(value) {
+    const token = String(value || '').trim();
+    if (!token) return;
+    try {
+        sessionStorage.setItem(CSRF_TOKEN_KEY, token);
+    } catch (e) {
+        // ignore storage failures
+    }
+}
 
 function fetchSessionUserSync() {
     const now = Date.now();
@@ -12,9 +68,23 @@ function fetchSessionUserSync() {
         const base = window.API_BASE_URL || '/barangay-reservation-system/api';
         xhr.open('GET', `${base}/auth/me`, false);
         xhr.withCredentials = true;
+        const tabSessionId = ensureTabSessionId();
+        if (tabSessionId) {
+            xhr.setRequestHeader('X-Tab-Session', tabSessionId);
+        }
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+            xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+        }
         xhr.send();
         if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) {
             __sessionUserCache = JSON.parse(xhr.responseText);
+            if (__sessionUserCache && __sessionUserCache.sessionId) {
+                setTabSessionId(__sessionUserCache.sessionId);
+            }
+            if (__sessionUserCache && __sessionUserCache.csrfToken) {
+                setCsrfToken(__sessionUserCache.csrfToken);
+            }
             __sessionUserCacheTs = now;
             return __sessionUserCache;
         }

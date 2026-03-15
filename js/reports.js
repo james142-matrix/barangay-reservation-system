@@ -1,6 +1,19 @@
 // Initialize page
+const reportState = {
+    dateRange: 'this-month',
+    reservations: [],
+    facilities: [],
+    users: [],
+    facilityMap: new Map(),
+    userMap: new Map()
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     if (!checkAuth('admin')) return;
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportReportsCSV);
+    if (exportPdfBtn) exportPdfBtn.addEventListener('click', exportReportsPDF);
     updateReports().catch(err => {
         showToast('Failed to load reports: ' + (err.message || 'Unknown error'), 'danger');
     });
@@ -83,13 +96,20 @@ async function updateReports() {
         
         reservations = reservations.filter(r => new Date(r.createdAt) >= cutoffDate);
     }
+
+    reportState.dateRange = dateRange;
+    reportState.reservations = reservations;
+    reportState.facilities = facilities || [];
+    reportState.users = users || [];
+    reportState.facilityMap = facilityMap;
+    reportState.userMap = userMap;
     
     // Show statistics
     const stats = calculateStats(reservations);
     document.getElementById('total-reservations').textContent = stats.total;
-    document.getElementById('approved-count').textContent = stats.approved;
+    document.getElementById('billing-count').textContent = stats.billing;
     document.getElementById('pending-count').textContent = stats.pending;
-    document.getElementById('rejected-count').textContent = stats.rejected;
+    document.getElementById('cancelled-count').textContent = stats.cancelled;
     document.getElementById('completed-count').textContent = stats.completed;
 
     // calculate revenue
@@ -117,33 +137,208 @@ async function updateReports() {
     showDetailedTable(reservations, facilityMap, userMap);
 }
 
+function escapeCsv(value) {
+    const text = String(value == null ? '' : value);
+    return `"${text.replace(/"/g, '""')}"`;
+}
+
+function formatDateRangeLabel(value) {
+    if (value === 'this-month') return 'This Month';
+    if (value === 'last-3-months') return 'Last 3 Months';
+    if (value === 'last-6-months') return 'Last 6 Months';
+    return 'All Time';
+}
+
+function buildExportRows() {
+    const reservations = reportState.reservations || [];
+    const facilityMap = reportState.facilityMap || new Map();
+    const userMap = reportState.userMap || new Map();
+    return reservations.map(r => {
+        const client = userMap.get(r.username);
+        const facility = facilityMap.get(String(r.facilityId));
+        const clientName = client ? client.fullname : r.username;
+        const facilityName = facility ? facility.name : 'Unknown';
+        const eventStart = r.eventStartDate || r.eventDate;
+        const eventEnd = r.eventEndDate;
+        const eventDateText = eventStart
+            ? `${formatReportDate(eventStart)}${eventEnd && eventEnd !== eventStart ? ' -> ' + formatReportDate(eventEnd) : ''}`
+            : '—';
+        const timeRange = (r.startTime && r.endTime)
+            ? `${formatReportTime(r.startTime)} - ${formatReportTime(r.endTime)}`
+            : '—';
+        const paymentStatus = r.paymentStatus === 'paid' ? 'ONLINE PAID' : (r.paymentStatus === 'cash' ? 'CASH PAID' : 'UNPAID');
+        const paymentMethod = r.paymentMethod ? String(r.paymentMethod).toUpperCase() : '—';
+        return {
+            clientName,
+            facilityName,
+            eventDateText,
+            timeRange,
+            amount: toNumber(r.totalCost).toFixed(2),
+            reservationStatus: formatReservationStatusLabel(r.status),
+            paymentStatus,
+            paymentMethod,
+            paidAt: formatReportDate(r.paymentDate),
+            submitted: formatReportDate(r.createdAt)
+        };
+    });
+}
+
+function exportReportsCSV() {
+    const rows = buildExportRows();
+    if (!rows.length) {
+        showToast('No report data to export.', 'warning');
+        return;
+    }
+    const headers = [
+        'Client',
+        'Facility',
+        'Event Date',
+        'Time',
+        'Amount (PHP)',
+        'Reservation Status',
+        'Payment Status',
+        'Payment Method',
+        'Paid At',
+        'Submitted'
+    ];
+    const csvRows = [headers.map(escapeCsv).join(',')];
+    rows.forEach(row => {
+        csvRows.push([
+            escapeCsv(row.clientName),
+            escapeCsv(row.facilityName),
+            escapeCsv(row.eventDateText),
+            escapeCsv(row.timeRange),
+            escapeCsv(row.amount),
+            escapeCsv(row.reservationStatus),
+            escapeCsv(row.paymentStatus),
+            escapeCsv(row.paymentMethod),
+            escapeCsv(row.paidAt),
+            escapeCsv(row.submitted)
+        ].join(','));
+    });
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reservation-status-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('CSV exported successfully.', 'success');
+}
+
+function exportReportsPDF() {
+    const rows = buildExportRows();
+    if (!rows.length) {
+        showToast('No report data to export.', 'warning');
+        return;
+    }
+
+    const stats = calculateStats(reportState.reservations || []);
+    const dateRangeLabel = formatDateRangeLabel(reportState.dateRange);
+    const printedAt = new Date().toLocaleString('en-US');
+    const tableRows = rows.map(row => `
+        <tr>
+            <td>${row.clientName}</td>
+            <td>${row.facilityName}</td>
+            <td>${row.eventDateText}</td>
+            <td>${row.timeRange}</td>
+            <td style="text-align:right;">${row.amount}</td>
+            <td>${row.reservationStatus}</td>
+            <td>${row.paymentStatus}</td>
+        </tr>
+    `).join('');
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Reservation Status Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; color: #111; margin: 24px; }
+        h1 { margin: 0 0 6px 0; font-size: 22px; }
+        .meta { margin-bottom: 16px; font-size: 12px; color: #444; }
+        .stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .card { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; min-width: 100px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { border: 1px solid #ddd; padding: 6px; vertical-align: top; }
+        th { background: #f5f5f5; text-align: left; }
+        .foot { margin-top: 12px; font-size: 11px; color: #555; }
+        @media print { body { margin: 12px; } }
+    </style>
+</head>
+<body>
+    <h1>Reservation and Status Report</h1>
+    <div class="meta">Date Range: ${dateRangeLabel}<br>Printed At: ${printedAt}</div>
+    <div class="stats">
+        <div class="card"><strong>Total</strong><div>${stats.total}</div></div>
+        <div class="card"><strong>In Billing</strong><div>${stats.billing}</div></div>
+        <div class="card"><strong>Pending</strong><div>${stats.pending}</div></div>
+        <div class="card"><strong>Cancelled</strong><div>${stats.cancelled}</div></div>
+        <div class="card"><strong>Completed</strong><div>${stats.completed}</div></div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Client</th>
+                <th>Facility</th>
+                <th>Event Date</th>
+                <th>Time</th>
+                <th>Amount (PHP)</th>
+                <th>Reservation Status</th>
+                <th>Payment Status</th>
+            </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+    </table>
+    <div class="foot">Use browser Print -> Save as PDF to download.</div>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    if (!printWindow) {
+        showToast('Popup blocked. Allow popups to export PDF.', 'warning');
+        return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+        printWindow.print();
+    }, 250);
+}
+
 // Calculate statistics
 function calculateStats(reservations) {
     return {
         total: reservations.length,
-        approved: reservations.filter(r => r.status === 'approved').length,
+        billing: reservations.filter(r => r.status === 'billing').length,
         pending: reservations.filter(r => r.status === 'pending').length,
-        rejected: reservations.filter(r => r.status === 'rejected').length,
+        cancelled: reservations.filter(r => r.status === 'cancelled').length,
         completed: reservations.filter(r => r.status === 'completed').length
     };
 }
 
 // Show facility usage report
 function showFacilityUsage(reservations, facilities) {
-    let html = '<table class="table"><thead><tr><th>Facility</th><th>Total</th><th>Approved</th><th>Pending</th><th>Completed</th><th>Rejected</th></tr></thead><tbody>';
+    let html = '<table class="table"><thead><tr><th>Facility</th><th>Total</th><th>Pending</th><th>Billing</th><th>Completed</th><th>Cancelled</th></tr></thead><tbody>';
     
     facilities.forEach(facility => {
         const facilityResv = reservations.filter(r => String(r.facilityId) === String(facility.id));
-        const approved = facilityResv.filter(r => r.status === 'approved').length;
-        const pending = facilityResv.filter(r => r.status === 'pending').length;
+        const pendingReview = facilityResv.filter(r => r.status === 'pending').length;
+        const readyForBilling = facilityResv.filter(r => r.status === 'billing').length;
         const completed = facilityResv.filter(r => r.status === 'completed').length;
-        const rejected = facilityResv.filter(r => r.status === 'rejected').length;
+        const rejected = facilityResv.filter(r => r.status === 'cancelled').length;
         
         html += `<tr>
             <td><strong>${facility.name}</strong></td>
             <td>${facilityResv.length}</td>
-            <td><span class="badge approved">${approved}</span></td>
-            <td><span class="badge pending">${pending}</span></td>
+            <td><span class="badge pending">${pendingReview}</span></td>
+            <td><span class="badge approved">${readyForBilling}</span></td>
             <td><span class="badge completed">${completed}</span></td>
             <td><span class="badge rejected">${rejected}</span></td>
         </tr>`;
@@ -188,27 +383,27 @@ function showTopClients(reservations, userMap) {
 // Show status breakdown
 function showStatusBreakdown(stats) {
     const total = stats.total || 1;
-    const appPercent = Math.round((stats.approved / total) * 100);
-    const pendPercent = Math.round((stats.pending / total) * 100);
+    const billingPercent = Math.round((stats.billing / total) * 100);
+    const reviewPercent = Math.round((stats.pending / total) * 100);
     const compPercent = Math.round((stats.completed / total) * 100);
-    const rejPercent = Math.round((stats.rejected / total) * 100);
+    const rejPercent = Math.round((stats.cancelled / total) * 100);
     
     const html = `
         <div style="background: #d4edda; padding: 15px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 20px; font-weight: bold; color: #28a745;">${appPercent}%</div>
-            <div style="color: #666; font-size: 12px;">Approved</div>
+            <div style="font-size: 20px; font-weight: bold; color: #28a745;">${billingPercent}%</div>
+            <div style="color: #666; font-size: 12px;">In Billing</div>
         </div>
         <div style="background: #fff3cd; padding: 15px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 20px; font-weight: bold; color: #ffa500;">${pendPercent}%</div>
+            <div style="font-size: 20px; font-weight: bold; color: #ffa500;">${reviewPercent}%</div>
             <div style="color: #666; font-size: 12px;">Pending</div>
         </div>
-        <div style="background: #e8f0ff; padding: 15px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 20px; font-weight: bold; color: #1d4ed8;">${compPercent}%</div>
+        <div style="background: #ede9fe; padding: 15px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 20px; font-weight: bold; color: #7c3aed;">${compPercent}%</div>
             <div style="color: #666; font-size: 12px;">Completed</div>
         </div>
         <div style="background: #f8d7da; padding: 15px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 20px; font-weight: bold; color: #ff6b6b;">${rejPercent}%</div>
-            <div style="color: #666; font-size: 12px;">Rejected</div>
+            <div style="font-size: 20px; font-weight: bold; color: #dc2626;">${rejPercent}%</div>
+            <div style="color: #666; font-size: 12px;">Cancelled</div>
         </div>
     `;
     
@@ -261,7 +456,7 @@ function showDetailedTable(reservations, facilityMap, userMap) {
         const facility = facilityMap.get(String(r.facilityId));
         const clientName = client ? client.fullname : r.username;
         const facilityName = facility ? facility.name : 'Unknown';
-        const statusClass = r.status === 'pending' ? 'pending' : ((r.status === 'approved' || r.status === 'completed') ? 'approved' : 'rejected');
+        const statusClass = getReservationStatusBadgeClass(r.status);
         const submitted = formatReportDate(r.createdAt);
         const eventStart = r.eventStartDate || r.eventDate;
         const eventEnd = r.eventEndDate;
@@ -273,7 +468,7 @@ function showDetailedTable(reservations, facilityMap, userMap) {
         const paymentClass = r.paymentStatus === 'paid' || r.paymentStatus === 'cash' ? 'approved' : 'pending';
         const paymentMethod = r.paymentMethod ? String(r.paymentMethod).toUpperCase() : '—';
         const paidAt = formatReportDate(r.paymentDate);
-        const reservationStatus = (r.status || 'pending').toUpperCase();
+        const reservationStatus = formatReservationStatusLabel(r.status);
         const timeRange = (r.startTime && r.endTime)
             ? `${formatReportTime(r.startTime)} - ${formatReportTime(r.endTime)}`
             : '—';
@@ -299,6 +494,22 @@ function showDetailedTable(reservations, facilityMap, userMap) {
     }
     
     document.getElementById('detailed-table').innerHTML = html;
+}
+
+function formatReservationStatusLabel(status) {
+    const value = String(status || 'pending').toLowerCase();
+    if (value === 'pending') return 'PENDING';
+    if (value === 'billing') return 'IN BILLING';
+    if (value === 'completed') return 'COMPLETED';
+    if (value === 'cancelled') return 'CANCELLED';
+    return value.replace(/_/g, ' ').toUpperCase();
+}
+
+function getReservationStatusBadgeClass(status) {
+    const value = String(status || 'pending').toLowerCase();
+    if (value === 'pending') return 'pending';
+    if (value === 'billing' || value === 'completed') return 'approved';
+    return 'rejected';
 }
 
 

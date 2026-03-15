@@ -76,11 +76,13 @@
     </div>
 
     <script src="js/password-policy.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
+    <script src="js/api.js?v=20260309d"></script>
     <script src="js/signup.js?v=20260303b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
 
 
 

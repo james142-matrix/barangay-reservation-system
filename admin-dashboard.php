@@ -1,26 +1,39 @@
+<?php
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Barangay Molugan</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=<?php echo urlencode((string) filemtime(__DIR__ . '/css/style.css')); ?>">
 </head>
 <body>
     <!-- Navbar -->
     <nav class="navbar">
         <a href="#" class="navbar-brand">🏛️ Barangay Molugan - Admin</a>
-</nav>
+        <div class="navbar-actions">
+            <div class="notification-wrap">
+                <button id="notificationToggleBtn" class="btn notification-trigger" type="button">
+                    🔔 Notifications <span id="notificationBadge" class="notification-dot-count">0</span>
+                </button>
+                <div id="notificationPanel" class="notification-panel"></div>
+            </div>
+        </div>
+    </nav>
 
     <!-- Sidebar -->
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="admin-dashboard.php" class="active">📊 Dashboard</a></li>
-            <li><a href="admin-requests.php">📋 Approval Requests</a></li>
-            <li><a href="admin-billing.php">💳 Billing</a></li>
+            <li><a href="admin-requests.php">📋 Review Requests</a></li>
+            <li><a href="admin-billing.php">💳 Payments &amp; Billing</a></li>
             <li><a href="admin-users.php">👥 Users</a></li>
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="admin-reserve.php">➕ New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
             <li><a href="admin-archive.php">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
@@ -29,13 +42,9 @@
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="dashboard-header">
-            <h1>Admin Dashboard</h1>
-            <div class="notification-wrap">
-                <button id="notificationToggleBtn" class="btn notification-trigger" type="button">
-                    🔔 Notifications <span id="notificationBadge" class="notification-dot-count"></span>
-                </button>
-                <div id="notificationPanel" class="notification-panel"></div>
+        <div class="dashboard-header page-title-row">
+            <div class="dashboard-heading">
+                <h1>📊 Admin Dashboard</h1>
             </div>
         </div>
 
@@ -46,40 +55,27 @@
                 <div class="value" id="stat-total">0</div>
             </div>
             <div class="stat-card pending">
-                <h3>Pending Approvals</h3>
+                <h3>Pending</h3>
                 <div class="value" id="stat-pending">0</div>
             </div>
-            <div class="stat-card approved">
-                <h3>Approved</h3>
-                <div class="value" id="stat-approved">0</div>
+            <div class="stat-card" style="border-top-color: #8b5cf6;">
+                <h3>Completed</h3>
+                <div class="value" id="stat-completed" style="color: #8b5cf6;">0</div>
             </div>
             <div class="stat-card rejected">
-                <h3>Rejected</h3>
+                <h3>Cancelled</h3>
                 <div class="value" id="stat-rejected">0</div>
-            </div>
-            <div class="stat-card" style="border-top-color: #3b82f6;">
-                <h3>Completed</h3>
-                <div class="value" id="stat-completed" style="color: #3b82f6;">0</div>
-            </div>
-            <div class="stat-card" style="border-top-color: #8b5cf6;">
-                <h3>Unpaid Approved</h3>
-                <div class="value" id="stat-unpaid-approved" style="color: #8b5cf6;">0</div>
             </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="table-container" style="margin-bottom: 30px;">
+        <!-- Recent Review Requests -->
+        <div class="table-container" style="margin-bottom: 30px; border-left: 4px solid #e83e8c;">
             <div class="table-header">
-                <h2>Quick Actions</h2>
+                <h2 style="font-size: 1.25rem; font-weight: 700; color: #2d3748;">📋 Recent Pending Requests</h2>
+                <a href="admin-requests.php" style="color: #e83e8c; text-decoration: none; font-size: 14px; font-weight: 500;">View All →</a>
             </div>
-            <div style="padding: 30px; text-align: center;">
-                <a href="admin-requests.php" class="btn btn-primary" style="margin: 0 10px 10px;">Review Pending Requests</a>
-                <a href="admin-billing.php" class="btn btn-primary" style="margin: 0 10px 10px;">Check Billing</a>
-                <a href="admin-users.php" class="btn btn-primary" style="margin: 0 10px 10px;">Manage Users</a>
-                <a href="admin-facilities.php" class="btn btn-primary" style="margin: 0 10px 10px;">Manage Facilities</a>
-                <a href="reserve.php" class="btn btn-primary" style="margin: 0 10px 10px;">Create Reservation</a>
-                <a href="reports.php" class="btn btn-primary" style="margin: 0 10px 10px;">View Reports</a>
-                <a href="admin-archive.php" class="btn btn-primary" style="margin: 0 10px 10px;">Archive Center</a>
+            <div id="pending-requests-list">
+                <!-- Pending requests will be loaded here -->
             </div>
         </div>
 
@@ -98,32 +94,14 @@
             <div class="table-header">
                 <h2>Recent Decisions</h2>
             </div>
-            <div id="recent-decisions-list">
-                <!-- Approved/rejected/completed decisions will be loaded here -->
-            </div>
-        </div>
-
-        <!-- Recent Pending Requests -->
-        <div class="table-container" style="margin-bottom: 30px;">
-            <div class="table-header">
-                <h2>Recent Pending Requests</h2>
-                <a href="admin-requests.php" style="color: #e83e8c; text-decoration: none; font-size: 14px;">View All →</a>
-            </div>
-            <div id="pending-requests-list">
-                <!-- Pending requests will be loaded here -->
-            </div>
+            <div id="recent-decisions-list"></div>
         </div>
     </main>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260303b"></script>
-    <script src="js/admin-dashboard.js?v=20260307a"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/database.js')); ?>"></script>
+    <script src="js/auth.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/auth.js')); ?>"></script>
+    <script src="js/api.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/api.js')); ?>"></script>
+    <script src="js/admin-dashboard.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/admin-dashboard.js')); ?>"></script>
+    <script src="js/responsive.js?v=<?php echo urlencode((string) filemtime(__DIR__ . '/js/responsive.js')); ?>"></script>
 </body>
 </html>
-
-
-
-
-

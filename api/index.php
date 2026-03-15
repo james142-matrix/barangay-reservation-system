@@ -3,6 +3,23 @@
 $cfg = require __DIR__ . '/config.php';
 date_default_timezone_set($cfg['timezone']);
 
+$logDir = trim((string)($cfg['log_dir'] ?? ''));
+if ($logDir !== '') {
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0775, true);
+    }
+    if (is_dir($logDir) && is_writable($logDir)) {
+        ini_set('log_errors', '1');
+        ini_set('error_log', rtrim($logDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'php-error.log');
+    }
+}
+
+// Allow tab-scoped sessions by accepting an explicit session id per tab.
+$tabSessionId = trim((string)($_SERVER['HTTP_X_TAB_SESSION'] ?? ''));
+if ($tabSessionId !== '' && preg_match('/^[a-zA-Z0-9,-]{16,128}$/', $tabSessionId)) {
+    session_id($tabSessionId);
+}
+
 session_name($cfg['session_name']);
 session_start();
 
@@ -16,7 +33,7 @@ if ($origin === 'null' || $origin === '') {
 header('Access-Control-Allow-Origin: ' . $origin);
 header('Vary: Origin');
 header('Access-Control-Allow-Credentials: true');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-Tab-Session, X-CSRF-Token');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
@@ -51,6 +68,117 @@ function notification_row(array $row): array
     ];
 }
 
+function parse_time_minutes(?string $timeValue): ?int
+{
+    $value = trim((string)$timeValue);
+    if ($value === '') return null;
+    if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/', $value, $m)) {
+        return null;
+    }
+    return ((int)$m[1] * 60) + (int)$m[2];
+}
+
+function normalize_optional_time_for_db($value): ?string
+{
+    $raw = trim((string)$value);
+    if ($raw === '') return null;
+    if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/', $raw, $m)) {
+        return null;
+    }
+    $hh = $m[1];
+    $mm = $m[2];
+    $ss = isset($m[3]) && $m[3] !== '' ? ltrim($m[3], ':') : '00';
+    return sprintf('%s:%s:%s', $hh, $mm, $ss);
+}
+
+function normalize_facility_rule_values(array $input): array
+{
+    $opening = normalize_optional_time_for_db($input['opening_time'] ?? $input['openingTime'] ?? null);
+    $closing = normalize_optional_time_for_db($input['closing_time'] ?? $input['closingTime'] ?? null);
+    $allowsOvernight = !empty($input['allows_overnight'] ?? $input['allowsOvernight'] ?? 0) ? 1 : 0;
+    $allowsAllDay = !empty($input['allows_all_day'] ?? $input['allowsAllDay'] ?? 0) ? 1 : 0;
+    $allowsMultiDay = !empty($input['allows_multi_day'] ?? $input['allowsMultiDay'] ?? 0) ? 1 : 0;
+    $maxDurationRaw = $input['max_duration_hours'] ?? $input['maxDurationHours'] ?? null;
+    $maxDurationHours = null;
+    if ($maxDurationRaw !== null && $maxDurationRaw !== '') {
+        $parsed = (int)$maxDurationRaw;
+        if ($parsed > 0) {
+            $maxDurationHours = $parsed;
+        }
+    }
+    return [
+        'opening_time' => $opening,
+        'closing_time' => $closing,
+        'allows_overnight' => $allowsOvernight,
+        'allows_all_day' => $allowsAllDay,
+        'allows_multi_day' => $allowsMultiDay,
+        'max_duration_hours' => $maxDurationHours,
+    ];
+}
+
+function normalize_facility_row_for_api(array $row): array
+{
+    $row['id'] = (int)$row['id'];
+    $row['capacity'] = (int)$row['capacity'];
+    $row['price'] = (float)$row['price'];
+    $row['icon'] = normalize_facility_icon($row['icon'] ?? '', (string)($row['name'] ?? ''));
+    $row['eventTypes'] = resolve_active_event_types($row['event_types'] ?? null, $row['event_types_archived'] ?? null, (string)($row['name'] ?? ''));
+    $row['archivedEventTypes'] = parse_event_types_list($row['event_types_archived'] ?? null);
+    $row['addOns'] = normalize_facility_add_ons($row['add_ons'] ?? null);
+    $rules = normalize_facility_rule_values($row);
+    $row['openingTime'] = $rules['opening_time'] ? substr($rules['opening_time'], 0, 5) : null;
+    $row['closingTime'] = $rules['closing_time'] ? substr($rules['closing_time'], 0, 5) : null;
+    $row['allowsOvernight'] = $rules['allows_overnight'] === 1;
+    $row['allowsAllDay'] = $rules['allows_all_day'] === 1;
+    $row['allowsMultiDay'] = $rules['allows_multi_day'] === 1;
+    $row['maxDurationHours'] = $rules['max_duration_hours'];
+    unset($row['event_types'], $row['event_types_archived'], $row['add_ons']);
+    return $row;
+}
+
+function validate_reservation_facility_rules(array $facility, string $eventDate, string $eventEndDate, string $startTime, string $endTime, int $startTs, int $endTs): ?string
+{
+    $rules = normalize_facility_rule_values($facility);
+    $allowsOvernight = $rules['allows_overnight'] === 1;
+    $allowsAllDay = $rules['allows_all_day'] === 1;
+    $allowsMultiDay = $rules['allows_multi_day'] === 1;
+    $maxDurationHours = $rules['max_duration_hours'];
+
+    $startMin = parse_time_minutes($startTime);
+    $endMin = parse_time_minutes($endTime);
+
+    if (!$allowsMultiDay && $eventEndDate !== $eventDate) {
+        return 'This facility does not allow multi-day reservation.';
+    }
+    if (!$allowsOvernight && $startMin !== null && $endMin !== null && $endMin <= $startMin) {
+        return 'This facility does not allow overnight use.';
+    }
+    if ($endTs <= $startTs) {
+        return 'End date/time must be after start date/time';
+    }
+
+    $durationHours = ($endTs - $startTs) / 3600;
+    if (!$allowsAllDay && $durationHours >= 24) {
+        return 'This facility does not allow all-day reservation.';
+    }
+    if ($maxDurationHours !== null && $durationHours > $maxDurationHours) {
+        return 'This booking exceeds the maximum allowed duration for this facility.';
+    }
+
+    $openingMin = parse_time_minutes($rules['opening_time']);
+    $closingMin = parse_time_minutes($rules['closing_time']);
+    if ($openingMin !== null && $closingMin !== null) {
+        if ($startMin === null || $endMin === null) {
+            return 'Reservation must be within facility operating hours.';
+        }
+        if ($startMin < $openingMin || $startMin > $closingMin || $endMin < $openingMin || $endMin > $closingMin) {
+            return 'Reservation must be within facility operating hours.';
+        }
+    }
+
+    return null;
+}
+
 function get_reservation_by_id(PDO $pdo, int $id): ?array
 {
     $st = $pdo->prepare('SELECT * FROM reservations WHERE id = ? AND archived = 0 LIMIT 1');
@@ -74,16 +202,166 @@ function notify_active_staff_admins(PDO $pdo, string $title, string $message, st
     }
 }
 
+function is_public_route(string $method, string $path): bool
+{
+    if ($method === 'GET' && ($path === '/' || $path === '/auth/me')) return true;
+    if ($method === 'POST' && in_array($path, [
+        '/auth/login',
+        '/users/login',
+        '/auth/signup',
+        '/users/forgot-password/check-email',
+        '/users/forgot-password/request',
+        '/users/forgot-password/reset',
+        '/auth/change-password-required',
+    ], true)) return true;
+    return false;
+}
+
+function is_csrf_exempt_route(string $method, string $path): bool
+{
+    if (!in_array($method, ['POST', 'PUT', 'DELETE'], true)) return true;
+    return in_array($path, [
+        '/auth/login',
+        '/users/login',
+        '/auth/signup',
+        '/users/forgot-password/check-email',
+        '/users/forgot-password/request',
+        '/users/forgot-password/reset',
+        '/auth/change-password-required',
+    ], true);
+}
+
+function get_csrf_token(): string
+{
+    $token = trim((string)($_SESSION['csrf_token'] ?? ''));
+    if ($token === '') {
+        $token = bin2hex(random_bytes(32));
+        $_SESSION['csrf_token'] = $token;
+    }
+    return $token;
+}
+
+function require_valid_csrf(string $method, string $path): void
+{
+    if (is_csrf_exempt_route($method, $path)) return;
+    $sessionUser = current_user();
+    if (!$sessionUser) {
+        send_json(['error' => 'Unauthorized', 'code' => 'UNAUTHORIZED'], 401);
+    }
+    $headerToken = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+    $sessionToken = trim((string)($_SESSION['csrf_token'] ?? ''));
+    if ($headerToken === '' || $sessionToken === '' || !hash_equals($sessionToken, $headerToken)) {
+        send_json(['error' => 'Invalid CSRF token', 'code' => 'INVALID_CSRF_TOKEN'], 403);
+    }
+}
+
+function enforce_session_idle_timeout(array $cfg, string $method, string $path): void
+{
+    $idleTimeout = (int)($cfg['session_idle_timeout_sec'] ?? 1800);
+    if ($idleTimeout <= 0) return;
+    $now = time();
+    $last = isset($_SESSION['last_activity_ts']) ? (int)$_SESSION['last_activity_ts'] : 0;
+    $hasUser = isset($_SESSION['user']) && is_array($_SESSION['user']);
+    if ($hasUser && $last > 0 && ($now - $last) > $idleTimeout) {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 3600, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        if (!is_public_route($method, $path)) {
+            send_json(['error' => 'Session expired due to inactivity', 'code' => 'SESSION_EXPIRED'], 401);
+        }
+        return;
+    }
+    if ($hasUser) {
+        $_SESSION['last_activity_ts'] = $now;
+    }
+}
+
+function ensure_login_throttle_table(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS auth_login_throttle (
+            scope VARCHAR(220) PRIMARY KEY,
+            failed_count INT NOT NULL DEFAULT 0,
+            first_failed_at DATETIME NULL DEFAULT NULL,
+            last_failed_at DATETIME NULL DEFAULT NULL,
+            lock_until DATETIME NULL DEFAULT NULL
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+    );
+}
+
+function login_throttle_scope_user(string $username): string
+{
+    return 'user:' . strtolower(trim($username));
+}
+
+function login_throttle_scope_ip(string $ip): string
+{
+    return 'ip:' . trim($ip);
+}
+
+function login_throttle_remaining_lock(PDO $pdo, string $scope): int
+{
+    $st = $pdo->prepare('SELECT lock_until FROM auth_login_throttle WHERE scope = ? LIMIT 1');
+    $st->execute([$scope]);
+    $row = $st->fetch();
+    if (!$row) return 0;
+    $lockUntil = strtotime((string)($row['lock_until'] ?? ''));
+    if ($lockUntil === false) return 0;
+    $remaining = $lockUntil - time();
+    return $remaining > 0 ? $remaining : 0;
+}
+
+function login_throttle_fail(PDO $pdo, string $scope, int $windowSec, int $maxAttempts, int $lockoutSec): void
+{
+    $st = $pdo->prepare('SELECT failed_count, first_failed_at FROM auth_login_throttle WHERE scope = ? LIMIT 1');
+    $st->execute([$scope]);
+    $row = $st->fetch();
+    $now = time();
+    $count = 1;
+    $firstAt = date('Y-m-d H:i:s', $now);
+    if ($row) {
+        $firstTs = strtotime((string)($row['first_failed_at'] ?? ''));
+        if ($firstTs !== false && ($now - $firstTs) <= $windowSec) {
+            $count = ((int)$row['failed_count']) + 1;
+            $firstAt = date('Y-m-d H:i:s', $firstTs);
+        }
+    }
+    $lockUntil = null;
+    if ($count >= $maxAttempts) {
+        $lockUntil = date('Y-m-d H:i:s', $now + $lockoutSec);
+    }
+    $up = $pdo->prepare(
+        'INSERT INTO auth_login_throttle (scope, failed_count, first_failed_at, last_failed_at, lock_until)
+         VALUES (?, ?, ?, NOW(), ?)
+         ON DUPLICATE KEY UPDATE failed_count = VALUES(failed_count), first_failed_at = VALUES(first_failed_at), last_failed_at = VALUES(last_failed_at), lock_until = VALUES(lock_until)'
+    );
+    $up->execute([$scope, $count, $firstAt, $lockUntil]);
+}
+
+function login_throttle_clear(PDO $pdo, string $scope): void
+{
+    $st = $pdo->prepare('DELETE FROM auth_login_throttle WHERE scope = ?');
+    $st->execute([$scope]);
+}
+
 try {
     $pdo = db();
     ensure_password_reset_table($pdo);
     ensure_archive_columns($pdo);
     ensure_user_approval_columns($pdo);
     ensure_reservation_optional_columns($pdo);
+    ensure_reservation_status_workflow($pdo);
     ensure_facility_optional_columns($pdo);
     ensure_facility_default_add_ons($pdo);
+    ensure_facility_icons($pdo);
+    ensure_login_throttle_table($pdo);
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = get_route_path();
+    enforce_session_idle_timeout($cfg, $method, $path);
+    require_valid_csrf($method, $path);
 
     if ($path === '/' || $path === '') {
         send_json(['name' => 'Barangay PHP API', 'status' => 'ok']);
@@ -94,15 +372,35 @@ try {
         $body = get_json_body();
         $username = trim((string)($body['username'] ?? ''));
         $password = (string)($body['password'] ?? '');
+        $requestIp = trim((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+        $windowSec = max(60, (int)($cfg['login_rate_limit_window_sec'] ?? 900));
+        $maxAttempts = max(3, (int)($cfg['login_rate_limit_max_attempts'] ?? 5));
+        $lockoutSec = max(60, (int)($cfg['login_rate_limit_lockout_sec'] ?? 900));
 
         if ($username === '' || $password === '') {
             send_json(['error' => 'username and password required'], 400);
+        }
+
+        $userScope = login_throttle_scope_user($username);
+        $ipScope = login_throttle_scope_ip($requestIp);
+        $lockedFor = max(
+            login_throttle_remaining_lock($pdo, $userScope),
+            login_throttle_remaining_lock($pdo, $ipScope)
+        );
+        if ($lockedFor > 0) {
+            send_json([
+                'error' => 'Too many login attempts. Try again later.',
+                'code' => 'LOGIN_RATE_LIMITED',
+                'retryAfter' => $lockedFor
+            ], 429);
         }
 
         $st = $pdo->prepare('SELECT * FROM users WHERE username = ? AND archived = 0 LIMIT 1');
         $st->execute([$username]);
         $user = $st->fetch();
         if (!$user || !verify_stored_password($password, (string)$user['password'])) {
+            login_throttle_fail($pdo, $userScope, $windowSec, $maxAttempts, $lockoutSec);
+            login_throttle_fail($pdo, $ipScope, $windowSec, $maxAttempts, $lockoutSec);
             send_json(['error' => 'Invalid username or password'], 401);
         }
         if (strtolower((string)($user['approval_status'] ?? 'approved')) !== 'approved') {
@@ -112,15 +410,21 @@ try {
             send_json(['error' => 'Client account login is disabled. This system is for staff/admin onsite use only.'], 403);
         }
 
+        login_throttle_clear($pdo, $userScope);
+        login_throttle_clear($pdo, $ipScope);
         $safeUser = sanitize_user($user);
         $_SESSION['user'] = $safeUser;
-        send_json($safeUser);
+        $_SESSION['last_activity_ts'] = time();
+        $csrfToken = get_csrf_token();
+        send_json(array_merge($safeUser, ['sessionId' => session_id(), 'csrfToken' => $csrfToken]));
     }
 
     if ($method === 'GET' && $path === '/auth/me') {
         $user = current_user();
         if (!$user) send_json(['error' => 'Unauthorized'], 401);
-        send_json($user);
+        $_SESSION['last_activity_ts'] = time();
+        $csrfToken = get_csrf_token();
+        send_json(array_merge($user, ['sessionId' => session_id(), 'csrfToken' => $csrfToken]));
     }
 
     if ($method === 'POST' && $path === '/auth/logout') {
@@ -169,7 +473,9 @@ try {
 
         $safeUser = sanitize_user($user);
         $_SESSION['user'] = $safeUser;
-        send_json($safeUser);
+        $_SESSION['last_activity_ts'] = time();
+        $csrfToken = get_csrf_token();
+        send_json(array_merge($safeUser, ['sessionId' => session_id(), 'csrfToken' => $csrfToken]));
     }
 
     if ($method === 'POST' && $path === '/auth/signup') {
@@ -225,6 +531,21 @@ try {
         if (!in_array($role, ['admin', 'barangay_staff'], true)) {
             send_json(['error' => 'Only admin and barangay_staff accounts are allowed'], 400);
         }
+
+        $usernameErr = validate_username($username);
+        if ($usernameErr) send_json(['error' => $usernameErr], 400);
+
+        $emailErr = validate_email_value($email);
+        if ($emailErr) send_json(['error' => $emailErr], 400);
+
+        $fullnameErr = validate_fullname($fullname);
+        if ($fullnameErr) send_json(['error' => $fullnameErr], 400);
+
+        $phoneErr = validate_optional_user_phone($phone);
+        if ($phoneErr) send_json(['error' => $phoneErr], 400);
+
+        $addressErr = validate_optional_user_address($address);
+        if ($addressErr) send_json(['error' => $addressErr], 400);
 
         $policyErr = validate_password_policy($password);
         if ($policyErr) send_json(['error' => $policyErr, 'code' => 'WEAK_PASSWORD'], 400);
@@ -310,6 +631,8 @@ try {
 
         $fields = [];
         $params = [];
+        $nextUsername = (string)($user['username'] ?? '');
+        $nextEmail = (string)($user['email'] ?? '');
         foreach (['username','email','fullname','phone','address','role'] as $k) {
             if (array_key_exists($k, $body)) {
                 if ($k === 'role') {
@@ -318,8 +641,50 @@ try {
                         send_json(['error' => 'Only admin and barangay_staff roles are allowed'], 400);
                     }
                 }
+                if ($k === 'username') {
+                    $value = trim((string)$body[$k]);
+                    $usernameErr = validate_username($value);
+                    if ($usernameErr) send_json(['error' => $usernameErr], 400);
+                    $nextUsername = $value;
+                    $fields[] = "$k = ?";
+                    $params[] = $value;
+                    continue;
+                }
+                if ($k === 'email') {
+                    $value = trim((string)$body[$k]);
+                    $emailErr = validate_email_value($value);
+                    if ($emailErr) send_json(['error' => $emailErr], 400);
+                    $nextEmail = $value;
+                    $fields[] = "$k = ?";
+                    $params[] = $value;
+                    continue;
+                }
+                if ($k === 'fullname') {
+                    $value = trim((string)$body[$k]);
+                    $nameErr = validate_fullname($value);
+                    if ($nameErr) send_json(['error' => $nameErr], 400);
+                    $fields[] = "$k = ?";
+                    $params[] = $value;
+                    continue;
+                }
+                if ($k === 'phone') {
+                    $value = trim((string)$body[$k]);
+                    $phoneErr = validate_optional_user_phone($value);
+                    if ($phoneErr) send_json(['error' => $phoneErr], 400);
+                    $fields[] = "$k = ?";
+                    $params[] = $value;
+                    continue;
+                }
+                if ($k === 'address') {
+                    $value = trim((string)$body[$k]);
+                    $addressErr = validate_optional_user_address($value);
+                    if ($addressErr) send_json(['error' => $addressErr], 400);
+                    $fields[] = "$k = ?";
+                    $params[] = $value;
+                    continue;
+                }
                 $fields[] = "$k = ?";
-                $params[] = $k === 'role' ? normalize_role($body[$k]) : $body[$k];
+                $params[] = $k === 'role' ? normalize_role($body[$k]) : trim((string)$body[$k]);
             }
         }
         if (array_key_exists('password', $body) && (string)$body['password'] !== '') {
@@ -331,6 +696,14 @@ try {
         }
 
         if (!$fields) send_json(['error' => 'No valid fields to update'], 400);
+
+        if (strcasecmp($nextUsername, (string)($user['username'] ?? '')) !== 0 || strcasecmp($nextEmail, (string)($user['email'] ?? '')) !== 0) {
+            $dup = $pdo->prepare('SELECT id FROM users WHERE id <> ? AND (LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)) LIMIT 1');
+            $dup->execute([$id, $nextUsername, $nextEmail]);
+            if ($dup->fetch()) {
+                send_json(['error' => 'username or email already exists'], 409);
+            }
+        }
 
         $params[] = $id;
         $up = $pdo->prepare('UPDATE users SET ' . implode(',', $fields) . ' WHERE id = ?');
@@ -457,18 +830,10 @@ try {
 
     // FACILITIES
     if ($method === 'GET' && $path === '/facilities') {
-        require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $rows = $pdo->query('SELECT * FROM facilities WHERE archived = 0 ORDER BY id ASC')->fetchAll();
         foreach ($rows as &$row) {
-            $row['id'] = (int)$row['id'];
-            $row['capacity'] = (int)$row['capacity'];
-            $row['price'] = (float)$row['price'];
-            $row['eventTypes'] = resolve_active_event_types($row['event_types'] ?? null, $row['event_types_archived'] ?? null, (string)($row['name'] ?? ''));
-            $row['archivedEventTypes'] = parse_event_types_list($row['event_types_archived'] ?? null);
-            $row['addOns'] = normalize_facility_add_ons($row['add_ons'] ?? null);
-            unset($row['event_types']);
-            unset($row['event_types_archived']);
-            unset($row['add_ons']);
+            $row = normalize_facility_row_for_api($row);
         }
         send_json($rows);
     }
@@ -481,31 +846,43 @@ try {
         $description = trim((string)($body['description'] ?? ''));
         $capacity = (int)($body['capacity'] ?? 0);
         $price = (float)($body['price'] ?? 0);
-        $icon = (string)($body['icon'] ?? '🏛️');
+        $icon = normalize_facility_icon($body['icon'] ?? '', $name);
         $status = (string)($body['status'] ?? 'available');
         $eventTypes = $body['eventTypes'] ?? null;
         $archivedEventTypes = $body['archivedEventTypes'] ?? [];
         $addOns = $body['addOns'] ?? null;
+        $rules = normalize_facility_rule_values($body);
 
         if ($name === '' || $capacity < 0 || $price < 0) {
             send_json(['error' => 'name, capacity and price are required'], 400);
         }
+        if (($rules['opening_time'] === null) xor ($rules['closing_time'] === null)) {
+            send_json(['error' => 'Set both opening and closing time, or leave both blank'], 400);
+        }
 
-        $ins = $pdo->prepare('INSERT INTO facilities (name,description,capacity,price,icon,status,event_types,event_types_archived,add_ons) VALUES (?,?,?,?,?,?,?,?,?)');
-        $ins->execute([$name, $description, $capacity, $price, $icon, $status, event_types_to_db_json($eventTypes, $name), json_encode(parse_event_types_list($archivedEventTypes), JSON_UNESCAPED_UNICODE), facility_add_ons_to_db_json($addOns)]);
+        $ins = $pdo->prepare('INSERT INTO facilities (name,description,capacity,price,icon,status,event_types,event_types_archived,add_ons,opening_time,closing_time,allows_overnight,allows_all_day,allows_multi_day,max_duration_hours) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([
+            $name,
+            $description,
+            $capacity,
+            $price,
+            $icon,
+            $status,
+            event_types_to_db_json($eventTypes, $name),
+            json_encode(parse_event_types_list($archivedEventTypes), JSON_UNESCAPED_UNICODE),
+            facility_add_ons_to_db_json($addOns),
+            $rules['opening_time'],
+            $rules['closing_time'],
+            $rules['allows_overnight'],
+            $rules['allows_all_day'],
+            $rules['allows_multi_day'],
+            $rules['max_duration_hours'],
+        ]);
         $id = (int)$pdo->lastInsertId();
         $st = $pdo->prepare('SELECT * FROM facilities WHERE id = ? AND archived = 0');
         $st->execute([$id]);
         $row = $st->fetch();
-        $row['id'] = (int)$row['id'];
-        $row['capacity'] = (int)$row['capacity'];
-        $row['price'] = (float)$row['price'];
-        $row['eventTypes'] = resolve_active_event_types($row['event_types'] ?? null, $row['event_types_archived'] ?? null, (string)($row['name'] ?? ''));
-        $row['archivedEventTypes'] = parse_event_types_list($row['event_types_archived'] ?? null);
-        $row['addOns'] = normalize_facility_add_ons($row['add_ons'] ?? null);
-        unset($row['event_types']);
-        unset($row['event_types_archived']);
-        unset($row['add_ons']);
+        $row = normalize_facility_row_for_api($row);
 
         $actorName = $actor ? (string)($actor['username'] ?? 'admin') : 'admin';
         notify_active_staff_admins(
@@ -537,6 +914,11 @@ try {
         $params = [];
         foreach (['name','description','capacity','price','icon','status'] as $k) {
             if (array_key_exists($k, $body)) {
+                if ($k === 'icon') {
+                    $fields[] = "{$k} = ?";
+                    $params[] = normalize_facility_icon($body[$k], $newName);
+                    continue;
+                }
                 $fields[] = "{$k} = ?";
                 $params[] = $body[$k];
             }
@@ -553,6 +935,43 @@ try {
             $fields[] = 'add_ons = ?';
             $params[] = facility_add_ons_to_db_json($body['addOns']);
         }
+        $ruleInput = normalize_facility_rule_values($body);
+        $existingRules = normalize_facility_rule_values($existing);
+        $hasOpening = array_key_exists('opening_time', $body) || array_key_exists('openingTime', $body);
+        $hasClosing = array_key_exists('closing_time', $body) || array_key_exists('closingTime', $body);
+        $hasOvernight = array_key_exists('allows_overnight', $body) || array_key_exists('allowsOvernight', $body);
+        $hasAllDay = array_key_exists('allows_all_day', $body) || array_key_exists('allowsAllDay', $body);
+        $hasMultiDay = array_key_exists('allows_multi_day', $body) || array_key_exists('allowsMultiDay', $body);
+        $hasMaxDuration = array_key_exists('max_duration_hours', $body) || array_key_exists('maxDurationHours', $body);
+        $nextOpening = $hasOpening ? $ruleInput['opening_time'] : $existingRules['opening_time'];
+        $nextClosing = $hasClosing ? $ruleInput['closing_time'] : $existingRules['closing_time'];
+        if (($nextOpening === null) xor ($nextClosing === null)) {
+            send_json(['error' => 'Set both opening and closing time, or leave both blank'], 400);
+        }
+        if ($hasOpening) {
+            $fields[] = 'opening_time = ?';
+            $params[] = $ruleInput['opening_time'];
+        }
+        if ($hasClosing) {
+            $fields[] = 'closing_time = ?';
+            $params[] = $ruleInput['closing_time'];
+        }
+        if ($hasOvernight) {
+            $fields[] = 'allows_overnight = ?';
+            $params[] = $ruleInput['allows_overnight'];
+        }
+        if ($hasAllDay) {
+            $fields[] = 'allows_all_day = ?';
+            $params[] = $ruleInput['allows_all_day'];
+        }
+        if ($hasMultiDay) {
+            $fields[] = 'allows_multi_day = ?';
+            $params[] = $ruleInput['allows_multi_day'];
+        }
+        if ($hasMaxDuration) {
+            $fields[] = 'max_duration_hours = ?';
+            $params[] = $ruleInput['max_duration_hours'];
+        }
 
         if (!$fields) send_json(['error' => 'No valid fields'], 400);
 
@@ -563,15 +982,7 @@ try {
         $st = $pdo->prepare('SELECT * FROM facilities WHERE id = ? AND archived = 0');
         $st->execute([$id]);
         $row = $st->fetch();
-        $row['id'] = (int)$row['id'];
-        $row['capacity'] = (int)$row['capacity'];
-        $row['price'] = (float)$row['price'];
-        $row['eventTypes'] = resolve_active_event_types($row['event_types'] ?? null, $row['event_types_archived'] ?? null, (string)($row['name'] ?? ''));
-        $row['archivedEventTypes'] = parse_event_types_list($row['event_types_archived'] ?? null);
-        $row['addOns'] = normalize_facility_add_ons($row['add_ons'] ?? null);
-        unset($row['event_types']);
-        unset($row['event_types_archived']);
-        unset($row['add_ons']);
+        $row = normalize_facility_row_for_api($row);
 
         $changedParts = [];
         if (array_key_exists('name', $body)) {
@@ -588,6 +999,21 @@ try {
         }
         if (array_key_exists('status', $body)) {
             if (strtolower(trim((string)$body['status'])) !== strtolower((string)($existing['status'] ?? ''))) $changedParts[] = 'status';
+        }
+        if ($hasOpening || $hasClosing) {
+            if ($nextOpening !== ($existingRules['opening_time'] ?? null) || $nextClosing !== ($existingRules['closing_time'] ?? null)) $changedParts[] = 'operating hours';
+        }
+        if ($hasOvernight) {
+            if ($ruleInput['allows_overnight'] !== ($existingRules['allows_overnight'] ?? 0)) $changedParts[] = 'overnight rule';
+        }
+        if ($hasAllDay) {
+            if ($ruleInput['allows_all_day'] !== ($existingRules['allows_all_day'] ?? 0)) $changedParts[] = 'all-day rule';
+        }
+        if ($hasMultiDay) {
+            if ($ruleInput['allows_multi_day'] !== ($existingRules['allows_multi_day'] ?? 0)) $changedParts[] = 'multi-day rule';
+        }
+        if ($hasMaxDuration) {
+            if ($ruleInput['max_duration_hours'] !== ($existingRules['max_duration_hours'] ?? null)) $changedParts[] = 'max duration';
         }
         if (array_key_exists('eventTypes', $body) || array_key_exists('archivedEventTypes', $body)) {
             $beforeActive = resolve_active_event_types($existing['event_types'] ?? null, $existing['event_types_archived'] ?? null, (string)($existing['name'] ?? ''));
@@ -646,14 +1072,13 @@ try {
 
     // RESERVATIONS
     if ($method === 'POST' && $path === '/reservations') {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $body = get_json_body();
 
         $username = trim((string)($body['username'] ?? ''));
-        if ($authUser['role'] === 'resident') {
-            $username = $authUser['username'];
-        }
         $clientEmail = trim((string)($body['clientEmail'] ?? ''));
+        $clientAddress = trim((string)($body['clientAddress'] ?? ''));
+        $organization = trim((string)($body['organization'] ?? ''));
 
         $facilityId = (int)($body['facilityId'] ?? 0);
         $eventDate = trim((string)($body['eventDate'] ?? ''));
@@ -663,7 +1088,7 @@ try {
         $eventType = trim((string)($body['eventType'] ?? ''));
         $expectedGuests = (int)($body['expectedGuests'] ?? 0);
         $eventDescription = trim((string)($body['eventDescription'] ?? ''));
-        $contactPerson = trim((string)($body['contactPerson'] ?? ''));
+        $contactPerson = trim((string)($body['contactPerson'] ?? $username));
         $contactPhone = trim((string)($body['contactPhone'] ?? ''));
         $chairsCount = parse_count($body['chairsCount'] ?? 0);
         $electronicsCount = parse_count($body['electronicsCount'] ?? 0);
@@ -676,8 +1101,26 @@ try {
         if ($username === '' || $facilityId <= 0 || $eventDate === '' || $startTime === '' || $endTime === '') {
             send_json(['error' => 'Missing required fields'], 400);
         }
-        if ($clientEmail !== '' && !filter_var($clientEmail, FILTER_VALIDATE_EMAIL)) {
-            send_json(['error' => 'Invalid client email address'], 400);
+        $nameError = validate_fullname($username);
+        if ($nameError) {
+            send_json(['error' => $nameError], 400);
+        }
+        $addressError = validate_reservation_address($clientAddress);
+        if ($addressError) {
+            send_json(['error' => $addressError], 400);
+        }
+        $organizationError = validate_optional_organization($organization);
+        if ($organizationError) {
+            send_json(['error' => $organizationError], 400);
+        }
+        if ($clientEmail !== '') {
+            $emailError = validate_email_value($clientEmail);
+            if ($emailError) {
+                send_json(['error' => 'Invalid client email address'], 400);
+            }
+            if (!email_domain_exists($clientEmail)) {
+                send_json(['error' => 'Email domain could not be verified. Please use a real email address.'], 400);
+            }
         }
 
         $startDt = strtotime($eventDate . ' ' . $startTime);
@@ -697,10 +1140,12 @@ try {
             send_json(['error' => 'Invalid down payment amount'], 400);
         }
 
-        $fs = $pdo->prepare('SELECT id,name,capacity,price,status,event_types,event_types_archived,add_ons FROM facilities WHERE id = ? AND archived = 0 LIMIT 1');
+        $fs = $pdo->prepare('SELECT id,name,capacity,price,status,event_types,event_types_archived,add_ons,opening_time,closing_time,allows_overnight,allows_all_day,allows_multi_day,max_duration_hours FROM facilities WHERE id = ? AND archived = 0 LIMIT 1');
         $fs->execute([$facilityId]);
         $facility = $fs->fetch();
         if (!$facility) send_json(['error' => 'Invalid facility selected'], 400);
+        $rulesError = validate_reservation_facility_rules($facility, $eventDate, $eventEndDate, $startTime, $endTime, (int)$startDt, (int)$endDt);
+        if ($rulesError) send_json(['error' => $rulesError], 400);
         if (strtolower((string)($facility['status'] ?? 'available')) !== 'available') {
             send_json(['error' => 'Selected facility is currently unavailable for reservation'], 409);
         }
@@ -757,7 +1202,7 @@ try {
         }
 
         // conflict check
-        $conf = $pdo->prepare('SELECT event_date,event_end_date,start_time,end_time FROM reservations WHERE facility_id = ? AND archived = 0 AND status IN ("pending","approved")');
+        $conf = $pdo->prepare('SELECT event_date,event_end_date,start_time,end_time,payment_status,status FROM reservations WHERE facility_id = ? AND archived = 0 AND status IN ("pending","completed")');
         $conf->execute([$facilityId]);
         while ($r = $conf->fetch()) {
             $rStart = strtotime($r['event_date'] . ' ' . $r['start_time']);
@@ -797,13 +1242,10 @@ try {
     }
 
     if ($method === 'GET' && $path === '/reservations') {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $requestedUser = isset($_GET['user']) ? trim((string)$_GET['user']) : '';
 
-        if ($authUser['role'] === 'resident') {
-            $st = $pdo->prepare('SELECT * FROM reservations WHERE username = ? AND archived = 0 ORDER BY id DESC');
-            $st->execute([$authUser['username']]);
-        } elseif ($requestedUser !== '') {
+        if ($requestedUser !== '') {
             $st = $pdo->prepare('SELECT * FROM reservations WHERE username = ? AND archived = 0 ORDER BY id DESC');
             $st->execute([$requestedUser]);
         } else {
@@ -816,27 +1258,34 @@ try {
     }
 
     if ($method === 'PUT' && preg_match('#^/reservations/(\d+)$#', $path, $m)) {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        $authUser = require_role(['admin', 'barangay_staff']);
         $id = (int)$m[1];
         $body = get_json_body();
 
         $existing = get_reservation_by_id($pdo, $id);
         if (!$existing) send_json(['error' => 'Reservation not found'], 404);
 
-        if ($authUser['role'] === 'resident') {
-            if ($existing['username'] !== $authUser['username']) send_json(['error' => 'Forbidden'], 403);
-            if ($existing['status'] !== 'pending') send_json(['error' => 'Only pending reservations can be edited by clients'], 400);
-
-            $allowed = ['eventDate','eventEndDate','startTime','endTime','eventType','expectedGuests','eventDescription','contactPerson','contactPhone','chairsCount','electronicsCount','medicalRoomDetails'];
-            foreach (array_keys($body) as $key) {
-                if (!in_array($key, $allowed, true)) {
-                    send_json(['error' => 'Clients can only update reservation details before approval'], 403);
-                }
-            }
-        }
-
         if (isset($body['paymentMethod']) && strtolower((string)$body['paymentMethod']) !== 'onsite_cash') {
             send_json(['error' => 'Only onsite cash payment is allowed'], 400);
+        }
+
+        $currentStatus = normalize_reservation_status_value($existing['status'] ?? 'pending', $existing['paymentStatus'] ?? 'pending');
+        $nextStatus = $currentStatus;
+        if (array_key_exists('status', $body)) {
+            $nextStatus = normalize_reservation_status_value($body['status'], $body['paymentStatus'] ?? $existing['paymentStatus'] ?? 'pending');
+            $allowedStatuses = ['pending', 'completed', 'cancelled'];
+            if (!in_array($nextStatus, $allowedStatuses, true)) {
+                send_json(['error' => 'Invalid reservation status value'], 400);
+            }
+            $allowedTransitions = [
+                'pending' => ['completed', 'cancelled'],
+                'completed' => [],
+                'cancelled' => [],
+            ];
+            if ($nextStatus !== $currentStatus && !in_array($nextStatus, $allowedTransitions[$currentStatus] ?? [], true)) {
+                send_json(['error' => "Invalid status transition: {$currentStatus} -> {$nextStatus}"], 400);
+            }
+            $body['status'] = $nextStatus;
         }
 
         $updates = [];
@@ -844,6 +1293,7 @@ try {
         $map = [
             'username' => 'username',
             'clientEmail' => 'client_email',
+            'facilityId' => 'facility_id',
             'status' => 'status',
             'eventDate' => 'event_date',
             'eventEndDate' => 'event_end_date',
@@ -873,48 +1323,145 @@ try {
             'rejectedAt' => 'rejected_at',
         ];
 
+        $nextFacilityId = isset($body['facilityId']) ? (int)$body['facilityId'] : (int)($existing['facilityId'] ?? 0);
+        $nextEventDate = trim((string)($body['eventDate'] ?? $existing['eventDate']));
+        $nextEventEndDate = trim((string)($body['eventEndDate'] ?? $existing['eventEndDate'] ?? $nextEventDate));
+        $nextStartTime = trim((string)($body['startTime'] ?? $existing['startTime']));
+        $nextEndTime = trim((string)($body['endTime'] ?? $existing['endTime']));
+        $nextExpectedGuests = isset($body['expectedGuests']) ? (int)$body['expectedGuests'] : (int)($existing['expectedGuests'] ?? 0);
+        $nextEventType = trim((string)($body['eventType'] ?? $existing['eventType'] ?? ''));
+        $nextContactPerson = trim((string)($body['contactPerson'] ?? $existing['contactPerson'] ?? $existing['username'] ?? ''));
+        $nextContactPhone = trim((string)($body['contactPhone'] ?? $existing['contactPhone'] ?? ''));
+        $nextClientEmail = trim((string)($body['clientEmail'] ?? $existing['clientEmail'] ?? ''));
+        $nextPaymentStatus = strtolower(trim((string)($body['paymentStatus'] ?? $existing['paymentStatus'] ?? 'pending')));
+        $nextTotalCost = isset($body['totalCost']) ? max(0, (float)$body['totalCost']) : max(0, (float)($existing['totalCost'] ?? 0));
+        $nextAmountPaid = isset($body['amountPaid']) ? max(0, (float)$body['amountPaid']) : max(0, (float)($existing['amountPaid'] ?? 0));
+        $detailFields = [
+            'username', 'clientEmail', 'facilityId', 'eventDate', 'eventEndDate', 'startTime', 'endTime',
+            'eventType', 'expectedGuests', 'eventDescription', 'contactPerson', 'contactPhone',
+            'chairsCount', 'electronicsCount', 'medicalRoomDetails', 'addOns', 'addOnTotal',
+            'paymentOption', 'downPaymentAmount', 'totalCost'
+        ];
+        $detailUpdateRequested = false;
+        foreach ($detailFields as $fieldName) {
+            if (array_key_exists($fieldName, $body)) {
+                $detailUpdateRequested = true;
+                break;
+            }
+        }
+        if ($detailUpdateRequested && ($currentStatus !== 'pending' || $nextPaymentStatus !== 'pending')) {
+            send_json(['error' => 'Reservation details can only be edited before billing has been acted on.'], 400);
+        }
+
+        if (isset($body['username'])) {
+            $usernameErr = validate_fullname(trim((string)$body['username']));
+            if ($usernameErr) send_json(['error' => $usernameErr], 400);
+        }
+        if ($nextClientEmail !== '') {
+            $emailError = validate_email_value($nextClientEmail);
+            if ($emailError) {
+                send_json(['error' => 'Invalid client email address'], 400);
+            }
+            if (!email_domain_exists($nextClientEmail)) {
+                send_json(['error' => 'Email domain could not be verified. Please use a real email address.'], 400);
+            }
+        }
+        if ($nextExpectedGuests < 1) {
+            send_json(['error' => 'Expected guests must be at least 1'], 400);
+        }
+        if ($nextAmountPaid > $nextTotalCost) {
+            send_json(['error' => 'Amount paid cannot exceed total cost'], 400);
+        }
+
+        $contactError = validate_contact_fields($nextContactPerson, $nextContactPhone);
+        if ($contactError) send_json(['error' => $contactError], 400);
+
+        $s = strtotime($nextEventDate . ' ' . $nextStartTime);
+        $e = strtotime($nextEventEndDate . ' ' . $nextEndTime);
+        if ($s === false || $e === false || $e <= $s) {
+            send_json(['error' => 'End date/time must be after start date/time'], 400);
+        }
+
+        $fs = $pdo->prepare('SELECT id,name,capacity,status,event_types,event_types_archived,opening_time,closing_time,allows_overnight,allows_all_day,allows_multi_day,max_duration_hours FROM facilities WHERE id = ? AND archived = 0 LIMIT 1');
+        $fs->execute([$nextFacilityId]);
+        $facility = $fs->fetch();
+        if (!$facility) {
+            send_json(['error' => 'Invalid facility selected'], 400);
+        }
+        $rulesError = validate_reservation_facility_rules($facility, $nextEventDate, $nextEventEndDate, $nextStartTime, $nextEndTime, (int)$s, (int)$e);
+        if ($rulesError) send_json(['error' => $rulesError], 400);
+        if ($nextExpectedGuests > (int)$facility['capacity']) {
+            send_json(['error' => 'Expected guests exceeds facility capacity (' . (int)$facility['capacity'] . ')'], 400);
+        }
+        $allowedEventTypes = resolve_active_event_types($facility['event_types'] ?? null, $facility['event_types_archived'] ?? null, (string)($facility['name'] ?? ''));
+        if ($nextEventType !== '' && !in_array($nextEventType, $allowedEventTypes, true)) {
+            send_json(['error' => 'Invalid event type for selected facility'], 400);
+        }
+        if (strtolower((string)$facility['name']) === 'medical room') {
+            $medical = trim((string)($body['medicalRoomDetails'] ?? $existing['medicalRoomDetails'] ?? ''));
+            if ($medical === '') {
+                send_json(['error' => 'Medical room requires a specific room/details input'], 400);
+            }
+        }
+        if (in_array($nextStatus, ['pending', 'completed'], true) && strtolower((string)($facility['status'] ?? 'available')) !== 'available') {
+            send_json(['error' => 'Selected facility is currently unavailable for reservation'], 409);
+        }
+
+        if (in_array($nextStatus, ['pending', 'completed'], true)) {
+            $conf = $pdo->prepare('SELECT id,event_date,event_end_date,start_time,end_time FROM reservations WHERE facility_id = ? AND archived = 0 AND status IN ("pending","completed") AND id <> ?');
+            $conf->execute([$nextFacilityId, $id]);
+            while ($r = $conf->fetch()) {
+                $rStart = strtotime((string)$r['event_date'] . ' ' . (string)$r['start_time']);
+                $rEnd = strtotime((string)($r['event_end_date'] ?: $r['event_date']) . ' ' . (string)$r['end_time']);
+                if ($rStart && $rEnd && !($e <= $rStart || $s >= $rEnd)) {
+                    send_json(['error' => 'This facility is already reserved for the selected schedule'], 409);
+                }
+            }
+        }
+
+        if ($nextStatus === 'completed' && !in_array($nextPaymentStatus, ['paid', 'cash'], true)) {
+            send_json(['error' => 'Reservation can be completed only after full payment'], 400);
+        }
+
         foreach ($map as $in => $dbCol) {
             if (!array_key_exists($in, $body)) continue;
             $value = $body[$in];
+            if ($in === 'username') $value = trim((string)$value);
+            if ($in === 'clientEmail') $value = trim((string)$value);
+            if ($in === 'facilityId') $value = (int)$value;
             if ($in === 'chairsCount' || $in === 'electronicsCount') $value = parse_count($value);
             if ($in === 'paymentOption') $value = normalize_payment_option($value);
             if ($in === 'downPaymentAmount') $value = max(0, (float)$value);
             if ($in === 'amountPaid') $value = max(0, (float)$value);
             if ($in === 'addOns') $value = json_encode(is_array($value) ? $value : [], JSON_UNESCAPED_UNICODE);
             if ($in === 'addOnTotal') $value = max(0, (float)$value);
+            if ($in === 'eventDate' || $in === 'eventEndDate' || $in === 'startTime' || $in === 'endTime' || $in === 'eventType' || $in === 'eventDescription' || $in === 'contactPerson' || $in === 'contactPhone' || $in === 'medicalRoomDetails') {
+                $value = trim((string)$value);
+            }
+            if ($in === 'status') $value = $nextStatus;
             $updates[] = "$dbCol = ?";
             $params[] = $value;
         }
 
+        if (array_key_exists('status', $body)) {
+            if ($nextStatus === 'pending') {
+                $updates[] = 'approved_by = NULL';
+                $updates[] = 'approved_at = NULL';
+                $updates[] = 'rejection_reason = NULL';
+                $updates[] = 'rejected_by = NULL';
+                $updates[] = 'rejected_at = NULL';
+            } elseif ($nextStatus === 'cancelled') {
+                if (!array_key_exists('rejectedBy', $body)) {
+                    $updates[] = 'rejected_by = ?';
+                    $params[] = (string)$authUser['username'];
+                }
+                if (!array_key_exists('rejectedAt', $body)) {
+                    $updates[] = 'rejected_at = NOW()';
+                }
+            }
+        }
+
         if (!$updates) send_json(['error' => 'No valid fields to update'], 400);
-
-        if (array_key_exists('amountPaid', $body)) {
-            $nextTotalCost = isset($body['totalCost']) ? max(0, (float)$body['totalCost']) : max(0, (float)($existing['totalCost'] ?? 0));
-            $nextAmountPaid = max(0, (float)$body['amountPaid']);
-            if ($nextAmountPaid > $nextTotalCost) {
-                send_json(['error' => 'Amount paid cannot exceed total cost'], 400);
-            }
-        }
-
-        if (isset($body['contactPerson']) || isset($body['contactPhone'])) {
-            $contactError = validate_contact_fields(
-                trim((string)($body['contactPerson'] ?? $existing['contactPerson'])),
-                trim((string)($body['contactPhone'] ?? $existing['contactPhone']))
-            );
-            if ($contactError) send_json(['error' => $contactError], 400);
-        }
-
-        if (isset($body['eventDate']) || isset($body['eventEndDate']) || isset($body['startTime']) || isset($body['endTime'])) {
-            $sDate = (string)($body['eventDate'] ?? $existing['eventDate']);
-            $eDate = (string)($body['eventEndDate'] ?? $existing['eventEndDate'] ?? $sDate);
-            $sTime = (string)($body['startTime'] ?? $existing['startTime']);
-            $eTime = (string)($body['endTime'] ?? $existing['endTime']);
-            $s = strtotime($sDate . ' ' . $sTime);
-            $e = strtotime($eDate . ' ' . $eTime);
-            if ($s === false || $e === false || $e <= $s) {
-                send_json(['error' => 'End date/time must be after start date/time'], 400);
-            }
-        }
 
         $params[] = $id;
         $up = $pdo->prepare('UPDATE reservations SET ' . implode(',', $updates) . ' WHERE id = ?');
@@ -963,16 +1510,8 @@ try {
     }
 
     if ($method === 'DELETE' && preg_match('#^/reservations/(\d+)$#', $path, $m)) {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $id = (int)$m[1];
-
-        if ($authUser['role'] === 'resident') {
-            $st = $pdo->prepare('SELECT username FROM reservations WHERE id = ? AND archived = 0 LIMIT 1');
-            $st->execute([$id]);
-            $row = $st->fetch();
-            if (!$row) send_json(['error' => 'Reservation not found'], 404);
-            if ($row['username'] !== $authUser['username']) send_json(['error' => 'Forbidden'], 403);
-        }
 
         $arc = $pdo->prepare('UPDATE reservations SET archived = 1, status = "cancelled" WHERE id = ? AND archived = 0');
         $arc->execute([$id]);
@@ -1012,15 +1551,7 @@ try {
         require_role(['admin']);
         $rows = $pdo->query('SELECT * FROM facilities WHERE archived = 1 ORDER BY id DESC')->fetchAll();
         foreach ($rows as &$row) {
-            $row['id'] = (int)$row['id'];
-            $row['capacity'] = (int)$row['capacity'];
-            $row['price'] = (float)$row['price'];
-            $row['eventTypes'] = resolve_active_event_types($row['event_types'] ?? null, $row['event_types_archived'] ?? null, (string)($row['name'] ?? ''));
-            $row['archivedEventTypes'] = parse_event_types_list($row['event_types_archived'] ?? null);
-            $row['addOns'] = normalize_facility_add_ons($row['add_ons'] ?? null);
-            unset($row['event_types']);
-            unset($row['event_types_archived']);
-            unset($row['add_ons']);
+            $row = normalize_facility_row_for_api($row);
         }
         send_json($rows);
     }
@@ -1036,15 +1567,7 @@ try {
         $st = $pdo->prepare('SELECT * FROM facilities WHERE id = ? LIMIT 1');
         $st->execute([$id]);
         $row = $st->fetch();
-        $row['id'] = (int)$row['id'];
-        $row['capacity'] = (int)$row['capacity'];
-        $row['price'] = (float)$row['price'];
-        $row['eventTypes'] = resolve_active_event_types($row['event_types'] ?? null, $row['event_types_archived'] ?? null, (string)($row['name'] ?? ''));
-        $row['archivedEventTypes'] = parse_event_types_list($row['event_types_archived'] ?? null);
-        $row['addOns'] = normalize_facility_add_ons($row['add_ons'] ?? null);
-        unset($row['event_types']);
-        unset($row['event_types_archived']);
-        unset($row['add_ons']);
+        $row = normalize_facility_row_for_api($row);
 
         $actorName = $actor ? (string)($actor['username'] ?? 'admin') : 'admin';
         $facilityName = (string)($row['name'] ?? ('Facility #' . $id));
@@ -1079,13 +1602,10 @@ try {
 
     // NOTIFICATIONS
     if ($method === 'GET' && $path === '/notifications') {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $requestedUser = isset($_GET['user']) ? trim((string)$_GET['user']) : '';
 
-        if ($authUser['role'] === 'resident') {
-            $st = $pdo->prepare('SELECT * FROM notifications WHERE username = ? ORDER BY created_at DESC');
-            $st->execute([$authUser['username']]);
-        } elseif ($requestedUser !== '') {
+        if ($requestedUser !== '') {
             $st = $pdo->prepare('SELECT * FROM notifications WHERE username = ? ORDER BY created_at DESC');
             $st->execute([$requestedUser]);
         } else {
@@ -1098,7 +1618,7 @@ try {
     }
 
     if ($method === 'POST' && $path === '/notifications') {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $body = get_json_body();
         $username = trim((string)($body['username'] ?? ''));
         $title = trim((string)($body['title'] ?? ''));
@@ -1109,10 +1629,6 @@ try {
 
         if ($username === '' || $title === '' || $message === '') {
             send_json(['error' => 'username, title and message are required'], 400);
-        }
-
-        if ($authUser['role'] === 'resident' && $username !== $authUser['username']) {
-            send_json(['error' => 'Forbidden'], 403);
         }
 
         $ins = $pdo->prepare('INSERT INTO notifications (username,title,message,type,is_read,reservation_id) VALUES (?,?,?,?,?,?)');
@@ -1126,16 +1642,8 @@ try {
     }
 
     if ($method === 'PUT' && preg_match('#^/notifications/(\d+)/read$#', $path, $m)) {
-        $authUser = require_role(['resident', 'admin', 'barangay_staff']);
+        require_role(['admin', 'barangay_staff']);
         $id = (int)$m[1];
-
-        if ($authUser['role'] === 'resident') {
-            $st = $pdo->prepare('SELECT username FROM notifications WHERE id = ? LIMIT 1');
-            $st->execute([$id]);
-            $row = $st->fetch();
-            if (!$row) send_json(['error' => 'Notification not found'], 404);
-            if ($row['username'] !== $authUser['username']) send_json(['error' => 'Forbidden'], 403);
-        }
 
         $up = $pdo->prepare('UPDATE notifications SET is_read = 1 WHERE id = ?');
         $up->execute([$id]);
@@ -1149,5 +1657,10 @@ try {
 
     send_json(['error' => 'Not found', 'path' => $path], 404);
 } catch (Throwable $e) {
-    send_json(['error' => 'Server error', 'detail' => $e->getMessage()], 500);
+    $payload = ['error' => 'Server error'];
+    if (!empty($cfg['app_debug'])) {
+        $payload['detail'] = $e->getMessage();
+    }
+    send_json($payload, 500);
 }
+

@@ -14,11 +14,11 @@
     <aside class="sidebar">
         <ul class="sidebar-menu">
             <li><a href="admin-dashboard.php">📊 Dashboard</a></li>
-            <li><a href="admin-requests.php">📋 Approval Requests</a></li>
-            <li><a href="admin-billing.php">💳 Billing</a></li>
+            <li><a href="admin-requests.php">📋 Review Requests</a></li>
+            <li><a href="admin-billing.php">💳 Payments & Billing</a></li>
             <li><a href="admin-users.php">👥 Users</a></li>
             <li><a href="admin-facilities.php">🏛️ Facilities</a></li>
-            <li><a href="reserve.php">📝 New Reservation</a></li>
+            <li><a href="admin-reserve.php">➕ New Reservation</a></li>
             <li><a href="reports.php">📈 Reports</a></li>
             <li><a href="admin-archive.php" class="active">🗃️ Archive Center</a></li>
             <li><a href="#" onclick="logout()">🚪 Logout</a></li>
@@ -45,10 +45,16 @@
         </div>
     </main>
 
-    <script src="js/database.js?v=20260303b"></script>
-    <script src="js/auth.js?v=20260303b"></script>
-    <script src="js/api.js?v=20260306f"></script>
-    <script src="js/admin-archive.js?v=20260306b"></script>
-    <script src="js/responsive.js?v=20260303b"></script>
+    <script src="js/database.js?v=20260309e"></script>
+    <script src="js/auth.js?v=20260309d"></script>
+    <script src="js/api.js?v=20260309d"></script>
+    <script src="js/admin-archive.js?v=20260309e"></script>
+    <script src="js/responsive.js?v=20260309c"></script>
 </body>
 </html>
+
+
+
+
+
+
